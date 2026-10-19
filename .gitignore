@@ -1,0 +1,28 @@
+# Entorno
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Pesos del modelo (se traen desde Colab, no se versionan)
+modelos/*.pt
+modelos/*.onnx
+
+# Videos, base de datos y exportaciones
+datos/videos/*
+datos/db/*
+datos/exportaciones/*
+!datos/**/.gitkeep
+
+# Dataset (imágenes y etiquetas pesadas); solo se versiona data.yaml
+dataset/*
+!dataset/.gitkeep
+!dataset/data.yaml
+
+# Salidas de Ultralytics
+runs/
+
+# IDE / SO
+.vscode/
+.idea/
+Thumbs.db

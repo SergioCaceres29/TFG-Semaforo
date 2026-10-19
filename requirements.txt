@@ -1,0 +1,7 @@
+# Stack fijo (CLAUDE.md §1). Python 3.13.
+# PyTorch 2.14 con CUDA 12.6: la GTX 1050 Ti (Pascal) no está soportada desde 2.15.
+--extra-index-url https://download.pytorch.org/whl/cu126
+torch==2.14.*
+torchvision
+ultralytics>=8.4
+opencv-python==4.13.*
