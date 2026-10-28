@@ -5,8 +5,8 @@ En los diagramas aparece la palabra «acceso» (por ejemplo `seleccionarAccesoPr
 ## 1. Clases de diseño (métodos en snake_case)
 
 ```
-InterfazPrincipal: seleccionar_archivo(), trazar_zonas(), configurar_parametros(), iniciar_procesamiento()
-GestorEjecucion  (-id_ejecucion: int): ejecutar(video, parametros), pausar(), finalizar()
+InterfazPrincipal: seleccionar_archivo(posicion), trazar_zonas(posicion), configurar_parametros(), iniciar_procesamiento(), mostrar_estados(estados)
+GestorEjecucion  (-id_ejecucion: int): ejecutar(videos, parametros), pausar(), finalizar()
 LectorVideo      : abrir(ruta) -> bool, leer_cuadro() -> (cuadro, marca_tiempo), obtener_metadatos(), cerrar()
 Detector         (-umbral_confianza: float): cargar_modelo(pesos), detectar(cuadro) -> list[Deteccion], filtrar_por_clase()
 ContadorZonas    : cargar_zonas(id_video), evaluar_pertenencia(deteccion), acumular_por_intervalo(), obtener_demanda_por_carril()
@@ -17,18 +17,21 @@ RepositorioSQLite: insertar_ejecucion(), insertar_conteo(), insertar_evento_fase
 ValidadorResultados: cargar_conteo_manual(), calcular_metricas(), generar_reporte()
 ```
 
+Tres carriles, un video por carril: `GestorEjecucion` crea un `LectorVideo` por carril (posiciones 1, 2, 3) y comparte un único `Detector`, `ContadorZonas`, `MotorDecision` y `ControladorSemaforo`. Cada video tiene una sola zona virtual, la de su carril.
+
 Dependencias (del diagrama): InterfazPrincipal → GestorEjecucion, ValidadorResultados. GestorEjecucion → LectorVideo, Detector, ContadorZonas, MotorDecision, Visualizador, RepositorioSQLite. MotorDecision → ControladorSemaforo. ContadorZonas, ControladorSemaforo y ValidadorResultados → RepositorioSQLite (en la implementación, a través de lo que el núcleo les pase; ellos no abren la base).
 
 ## 2. Bucle de ejecución (diagrama de secuencia, CU-02)
 
 ```
-iniciar_procesamiento(video, parametros)
-  id_ejecucion = repo.insertar_ejecucion(parametros)          # estado EnEjecucion (RF-13)
-  lector.abrir(video)
-  mientras haya cuadros:
-      cuadro, t = lector.leer_cuadro()                        # t = n_cuadro / fps
-      detecciones = detector.detectar(cuadro)                 # ya filtradas por clase y confianza
-      ocupacion = contador.acumular(detecciones, zonas)       # ocupación del cuadro actual
+iniciar_procesamiento(videos[1..3], parametros)
+  validar: mismos fps en los 3 videos (si no, ErrorVideo)
+  id_ejecucion = repo.insertar_ejecucion(parametros, videos)  # estado EnEjecucion (RF-13) + ejecucion_video
+  lectores[p].abrir(videos[p]) para p = 1, 2, 3
+  mientras los 3 lectores tengan cuadros:                     # termina con el video más corto
+      para cada carril p: cuadros[p], t = lectores[p].leer_cuadro()   # mismo n → mismo t = n / fps
+      detecciones[p] = detector.detectar(cuadros[p])          # en lote; ya filtradas por clase y confianza
+      ocupacion[p] = contador.acumular(detecciones[p], zona[p])  # cada video solo contra su zona
       controlador.actualizar(t)                               # vencimientos de amarillo / verde máximo
       si t cierra un intervalo:
           repo.insertar_conteo(id_ejecucion, zona, clase, cantidad, inicio, fin)   # por zona y clase
@@ -36,8 +39,9 @@ iniciar_procesamiento(video, parametros)
             └─ controlador.solicitar_transicion(carril)
                  si permitida: repo.insertar_evento_fase(...) y nuevos estados
                  si no (restricción temporal): mantiene el estado vigente
-      visualizador.componer(cuadro, detecciones, conteos, estados) -> cv2.imshow
-  lector.cerrar(); estado Finalizada; devolver resumen
+      para cada carril p: imagen[p] = visualizador.componer(cuadros[p], detecciones[p], conteos[p])  # bytes PPM
+      cola.put(cuadros anotados, conteos, estados, t)         # la interfaz la lee con after()
+  lectores.cerrar(); estado Finalizada; devolver resumen
 ```
 
 ## 3. Máquina de estados de un carril (RN-05, RN-06, RN-08)
@@ -106,7 +110,6 @@ CREATE TABLE IF NOT EXISTS clase_vehiculo (
 
 CREATE TABLE IF NOT EXISTS ejecucion (
     id_ejecucion     INTEGER PRIMARY KEY,
-    id_video         INTEGER NOT NULL REFERENCES video(id_video),
     fecha_hora       TEXT NOT NULL,
     version_modelo   TEXT NOT NULL,
     umbral_demanda   INTEGER NOT NULL CHECK (umbral_demanda >= 0),
@@ -116,6 +119,13 @@ CREATE TABLE IF NOT EXISTS ejecucion (
     verde_max        INTEGER NOT NULL CHECK (verde_max >= verde_min),
     amarillo         INTEGER NOT NULL CHECK (amarillo > 0),
     estado           TEXT NOT NULL CHECK (estado IN ('Creada','EnEjecucion','Pausada','Finalizada','Abortada'))
+);
+
+CREATE TABLE IF NOT EXISTS ejecucion_video (        -- los 3 videos de una ejecución, uno por carril
+    id_ejecucion     INTEGER NOT NULL REFERENCES ejecucion(id_ejecucion),
+    id_video         INTEGER NOT NULL REFERENCES video(id_video),
+    posicion         INTEGER NOT NULL CHECK (posicion BETWEEN 1 AND 3),
+    PRIMARY KEY (id_ejecucion, posicion)
 );
 
 CREATE TABLE IF NOT EXISTS conteo (                 -- solo inserción (RNF-09)
@@ -173,10 +183,33 @@ INSERT OR IGNORE INTO clase_vehiculo (id_clase, descripcion) VALUES (1,'auto'), 
 Notas:
 - El esquema vive en `src/semaforo/esquema.sql` y `RepositorioSQLite` lo aplica al abrir la base (`datos/db/semaforo.db`).
 - Cada conteo se confirma (`commit`) al cierre de su intervalo, para que una interrupción no pierda lo ya guardado (HU-08 CA-04).
+- Cambio aprobado el 28/10/2026: `ejecucion` ya no tiene `id_video`; los tres videos se asocian en `ejecucion_video` (posición 1–3 = carril en la interfaz). Cada video tiene una sola fila en `zona_virtual`.
 - `ejecucion.estado` sí se actualiza (Creada → EnEjecucion → Finalizada/Abortada); solo `conteo` y `evento_fase` son de solo inserción.
 - Mapeo índice del modelo → `clase_vehiculo.id_clase`: 0 → 1 (auto), 1 → 2 (moto), 2 → 3 (camion).
 
-## 6. Estructura del repositorio
+## 6. Interfaz del operador (tkinter)
+
+```
+┌────────────┬───────────────────────────────────────────────────────────┐
+│ Barra      │  Encabezado: título de la vista · estado de la ejecución  │
+│ lateral    ├───────────────────────────────────────────────────────────┤
+│            │  ┌ Carril 1 ──────┐ ┌ Carril 2 ──────┐ ┌ Carril 3 ──────┐ │
+│ Panel      │  │ video   │ sem. │ │ video   │ sem. │ │ video   │ sem. │ │
+│ Videos y   │  │ conteo por clase│ │ conteo por clase│ │ conteo por clase│ │
+│  zonas     │  │ [Cargar] [Zona] │ │ [Cargar] [Zona] │ │ [Cargar] [Zona] │ │
+│ Parámetros │  └─────────────────┘ └─────────────────┘ └─────────────────┘ │
+│ Ejecución  ├───────────────────────────────────────────────────────────┤
+│ Resultados │  ▶ Iniciar  ⏸ Pausar  ■ Detener   t del video · progreso  │
+│ Validación │                                                           │
+│ Exportar   │                                                           │
+└────────────┴───────────────────────────────────────────────────────────┘
+```
+
+- Solo biblioteca estándar (`tkinter`, `ttk`): sin Pillow. Los cuadros llegan como bytes PPM (`cv2.imencode` en `visualizacion.py`) y se muestran con `tk.PhotoImage`.
+- `GestorEjecucion` corre en un hilo aparte y envía mensajes (`CambioFase`, `ActualizacionCarril`, `ProgresoEjecucion` de `modelos.py`) por una `queue.Queue`. La interfaz la vacía con `after()`; nunca se toca un widget desde otro hilo.
+- La interfaz no decide nada: solo muestra los estados que recibe del motor (`mostrar_estados`).
+
+## 7. Estructura del repositorio
 
 ```
 semaforo-tfg/

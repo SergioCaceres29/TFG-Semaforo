@@ -6,19 +6,19 @@ Este archivo es la referencia de qué construir y cómo verificarlo. Si algo de 
 
 | Cód. | Requisito | Descripción | Prio. | Caso de prueba |
 |---|---|---|---|---|
-| RF-01 | Carga de video pregrabado | Seleccionar y cargar un mp4 local, validando extensión y apertura antes de procesar. | M | CP-01 |
-| RF-02 | Definición de zonas virtuales | Delimitar zonas poligonales sobre el primer cuadro, cada una asociada a un carril. | M | CP-02 |
+| RF-01 | Carga de video pregrabado | Seleccionar y cargar tres mp4 locales, uno por carril, validando extensión, apertura y fps iguales antes de procesar. | M | CP-01 |
+| RF-02 | Definición de zonas virtuales | Delimitar una zona poligonal sobre el primer cuadro del video de cada carril. | M | CP-02 |
 | RF-03 | Persistencia de zonas | Guardar coordenadas de zonas por video para reutilizarlas sin redefinir. | M | CP-03 |
 | RF-04 | Detección de vehículos | Procesar cuadros con el modelo y obtener cajas con nivel de certeza. | M | CP-04 |
 | RF-05 | Clasificación | Clasificar cada detección en auto, moto o camión; descartar lo demás. | M | CP-05 |
 | RF-06 | Conteo de demanda por zona | Cantidad de vehículos dentro de cada zona en cada intervalo, por clase. | M | CP-06 |
 | RF-07 | Motor de reglas de prioridad | Comparar demanda de cada carril contra umbral configurable y decidir prioridad. | M | CP-07 |
 | RF-08 | Recreación del control semafórico | Simular verde/amarillo/rojo por carril respetando verde mínimo y máximo. | M | CP-08 |
-| RF-09 | Visualización | Ventana con video, cajas, clase, conteo vigente por zona y estado del semáforo. | M | CP-09 |
+| RF-09 | Visualización | Ventana con los tres videos, cajas, clase, conteo vigente por zona y el semáforo de cada carril. | M | CP-09 |
 | RF-10 | Parametrización del ciclo | Configurar umbral de demanda, verde mín/máx y amarillo antes de ejecutar. | S | CP-10 |
 | RF-11 | Registro de conteos | Guardar cada conteo por zona, clase e intervalo con marca de tiempo del video. | M | CP-11 |
 | RF-12 | Registro de eventos de fase | Guardar cada cambio de estado: carril, estado, duración, demanda que lo motivó. | S | CP-12 |
-| RF-13 | Registro de parámetros | Guardar video, umbrales, tiempos de fase y versión del modelo de cada ejecución. | S | CP-13 |
+| RF-13 | Registro de parámetros | Guardar los tres videos (con su carril), umbrales, tiempos de fase y versión del modelo de cada ejecución. | S | CP-13 |
 | RF-14 | Exportación CSV | Exportar conteos a CSV con la biblioteca estándar. | S | CP-14 |
 | RF-15 | Métricas de validación | Cargar conteo manual de un video y calcular error y precisión por clase. | S | CP-15 |
 | RF-16 | Reproducción controlada | Iniciar, pausar y detener sin perder registros persistidos. | C | CP-16 |
@@ -44,7 +44,7 @@ Meta al 10/12/2026: 13 de 16 RF (todos los M + RF-10, RF-12, RF-13). RF-14, RF-1
 
 | Cód. | Regla | Descripción |
 |---|---|---|
-| RN-01 | Origen de datos | Solo videos pregrabados mp4 de la intersección de estudio. |
+| RN-01 | Origen de datos | Solo videos pregrabados mp4 de la intersección de estudio: uno por carril (3 en total), grabados en el mismo lapso de tiempo. |
 | RN-02 | Clases admitidas | Solo auto, moto y camión. Otra categoría se descarta y no suma demanda. |
 | RN-03 | Unicidad del conteo | Un vehículo en una zona cuenta una sola vez por intervalo (ocupación en el cuadro de cierre). |
 | RN-04 | Asignación de prioridad | Prioridad al carril con mayor demanda que además supere el umbral. |
@@ -62,10 +62,12 @@ Meta al 10/12/2026: 13 de 16 RF (todos los M + RF-10, RF-12, RF-13). RF-14, RF-1
 - CA-02: NO admite extensiones distintas de mp4; mensaje de error controlado y sigue operativo.
 - CA-03: con archivo válido muestra el primer cuadro y registra metadatos: duración, fps, resolución.
 - CA-04: mp4 que no abre (corrupto) → informa sin interrumpir la ejecución.
+- CA-05: se carga un video en cada uno de los 3 carriles; la ejecución no se habilita hasta tener los tres.
+- CA-06: si los fps de los tres videos no coinciden → error controlado. Si la duración difiere, se procesa hasta el final del más corto.
 
 ### HU-02 · Definición y persistencia de zonas virtuales — Sprint 1 · 5 pts · RF-02, RF-03 · RN-04, RN-09 · CP-02, CP-03
-- CA-01: sobre el primer cuadro, el operador marca vértices; el sistema dibuja el polígono y pide el nombre del carril.
-- CA-02: NO acepta polígonos de < 3 vértices ni dos zonas con el mismo nombre de carril en un video.
+- CA-01: sobre el primer cuadro del video de cada carril, el operador marca vértices; el sistema dibuja el polígono y pide el nombre del carril.
+- CA-02: NO acepta polígonos de < 3 vértices, más de una zona por video ni dos carriles con el mismo nombre.
 - CA-03: al confirmar, las coordenadas se guardan asociadas al video.
 - CA-04: se puede modificar vértices o eliminar una zona sin redefinir las demás.
 
@@ -103,11 +105,12 @@ Meta al 10/12/2026: 13 de 16 RF (todos los M + RF-10, RF-12, RF-13). RF-14, RF-1
 - CA-01: cajas con la clase de cada vehículo en cada cuadro.
 - CA-02: contorno de cada zona y su conteo vigente.
 - CA-03: estado simulado de cada carril, actualizado en el momento de la transición.
+- CA-04: los tres videos se muestran en simultáneo, cada uno junto al semáforo de su carril.
 
 ### HU-08 · Registro persistente de conteos — Sprint 4 · 3 pts · RF-11 · RN-09 · CP-11, CP-25
 - CA-01: al cierre de cada intervalo se guarda un registro por zona y clase con la marca de tiempo del video.
 - CA-02: todo registro lleva id de ejecución y zona.
-- CA-03: NO se sobrescriben ejecuciones anteriores; re-ejecutar el mismo video crea registros nuevos.
+- CA-03: NO se sobrescriben ejecuciones anteriores; re-ejecutar los mismos videos crea registros nuevos.
 - CA-04: si el proceso se interrumpe, lo ya guardado se conserva.
 
 ### RF-13 · Registro de parámetros de ejecución — Sprint 4 · CP-13
