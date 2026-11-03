@@ -116,7 +116,7 @@ Reglas de dependencia:
 | Sprint | Fechas | Alcance | Estado |
 |---|---|---|---|
 | 0 | 19/10–29/10 | Entorno, dataset, entrenamiento en Colab, `best.pt` · adelanto: esqueleto visual de la interfaz (semáforos simulados) | en curso |
-| 1 | 30/10–09/11 | HU-01, HU-02, RF-10 | pendiente |
+| 1 | 30/10–09/11 | HU-01, HU-02, RF-10 | en curso · HU-01 en revisión (CP-01, CP-21 OK) |
 | 2 | 10/11–20/11 | HU-03, HU-04 (sprint sin holgura) | pendiente |
 | 3 | 21/11–01/12 | HU-05, HU-06, RF-12 | pendiente |
 | 4 | 02/12–10/12 | HU-07, HU-08, RF-13, integración (80 %) | pendiente |
