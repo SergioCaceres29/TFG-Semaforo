@@ -130,7 +130,7 @@ Reglas de dependencia (§4.1 del TFG):
 - **Mapeo de clases del modelo**: índice 0 = auto, 1 = moto, 2 = camión (debe coincidir con `dataset/data.yaml`). Camión incluye ómnibus (RN-02).
 - **Interfaz: tkinter** (biblioteca estándar, sin Pillow ni otros paquetes). Barra lateral izquierda con acceso a todos los módulos; panel principal con 3 tarjetas, una por carril, con su video, conteo por clase y, **solo durante la demostración**, su semáforo dibujado en un `Canvas`; debajo, panel de comparación de los dos planes. Los cuadros se muestran en `tk.PhotoImage` a partir de bytes PPM generados con `cv2.imencode` en `visualizacion.py`. El análisis corre en un hilo aparte y se comunica con la interfaz mediante `queue.Queue` + `after()` (tkinter no es seguro entre hilos). Trazado de zonas sobre un `Canvas` de tkinter.
 - **Esquema con 3 videos** (aprobado 28/10/2026): `ejecucion` no tiene `id_video`; los tres videos van en `ejecucion_video(id_ejecucion, id_video, posicion 1..3)`. Ver `docs/specs/diseno.md` §5.
-- **Esquema, cambios del Word nov/2026** (pendientes en `esquema.sql`): `evento_fase.tipo_plan` (RECOMENDADO/FIJO), `evento_fase.marca_tiempo` en segundos de simulación, `ejecucion.estado` sin `Pausada`. Aplicar al empezar HU-08 (estado) y RF-12 (tipo_plan), avisando antes.
+- **Esquema, cambios del Word nov/2026**: `ejecucion.estado` sin `Pausada` (aplicado en HU-08). Pendiente para RF-12: `evento_fase.tipo_plan` (RECOMENDADO/FIJO) y `evento_fase.marca_tiempo` en segundos de simulación; avisar antes de aplicarlo.
 - **Rendimiento con 3 videos** (A CONFIRMAR al medir RNF-03): detección en lote de los 3 cuadros; si no alcanza, detectar cada *k* cuadros pero siempre en el cuadro de cierre del intervalo. RNF-03 mide solo el análisis.
 
 ## 7. Estado y avance (actualizar al cerrar cada HU)
@@ -138,7 +138,7 @@ Reglas de dependencia (§4.1 del TFG):
 | Sprint | Fechas | Alcance | Estado |
 |---|---|---|---|
 | 0 | 19/10–29/10 | Entorno, dataset, entrenamiento en Colab, `best.pt` · adelanto: esqueleto visual de la interfaz (semáforos simulados) | en curso |
-| 1 | 30/10–09/11 | HU-01, HU-02, **HU-08**, RF-10 (+ conteo manual de referencia, tarea QA) | en curso · HU-01 aprobada · HU-02 en revisión (CP-02, CP-03 OK) · RF-10 en revisión (CP-10 OK) · HU-08 pendiente |
+| 1 | 30/10–09/11 | HU-01, HU-02, **HU-08**, RF-10 (+ conteo manual de referencia, tarea QA) | en curso · HU-01 aprobada · HU-02 en revisión (CP-02, CP-03 OK) · RF-10 en revisión (CP-10 OK) · HU-08 en revisión (CP-11, CP-25 OK) · falta tu aprobación de HU-02, RF-10 y HU-08, y el conteo manual de referencia (QA) |
 | 2 | 10/11–20/11 | HU-03, HU-04 (sprint sin holgura) | pendiente |
 | 3 | 21/11–01/12 | HU-05, HU-06, RF-12 (generación de ambos planes) | pendiente |
 | 4 | 02/12–10/12 | HU-07, **HU-09** (demostración y comparación, RF-16, RF-17), integración (80 %: 14 de 17 RF) | pendiente |

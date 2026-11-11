@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS ejecucion (
     verde_min        INTEGER NOT NULL CHECK (verde_min > 0),
     verde_max        INTEGER NOT NULL CHECK (verde_max >= verde_min),
     amarillo         INTEGER NOT NULL CHECK (amarillo > 0),
-    estado           TEXT NOT NULL CHECK (estado IN ('Creada','EnEjecucion','Pausada','Finalizada','Abortada'))
+    estado           TEXT NOT NULL CHECK (estado IN ('Creada','EnEjecucion','Finalizada','Abortada'))   -- sin 'Pausada' (Figura 10)
 );
 
 CREATE TABLE IF NOT EXISTS ejecucion_video (        -- los 3 videos de una ejecución, uno por carril

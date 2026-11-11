@@ -84,6 +84,20 @@ class Parametros:
     amarillo: int
 
 
+@dataclass(frozen=True)
+class RegistroConteo:
+    """RF-11, RN-03: ocupación de una zona y clase en el cuadro de cierre de un intervalo.
+
+    Los límites del intervalo están en segundos del video.
+    """
+
+    id_zona: int
+    clase: Clase
+    cantidad: int
+    intervalo_inicio: float
+    intervalo_fin: float
+
+
 Vertice = tuple[int, int]
 
 
