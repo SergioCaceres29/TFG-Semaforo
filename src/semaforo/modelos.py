@@ -69,6 +69,21 @@ class MetadatosVideo:
         return f"{self.ancho}x{self.alto}"
 
 
+@dataclass(frozen=True)
+class Parametros:
+    """RF-10: parámetros de una ejecución (mismas columnas que la tabla ejecucion).
+
+    Los tiempos son segundos enteros; las reglas de validación están en configuracion.py.
+    """
+
+    umbral_demanda: int
+    umbral_confianza: float
+    intervalo_seg: int
+    verde_min: int
+    verde_max: int
+    amarillo: int
+
+
 Vertice = tuple[int, int]
 
 

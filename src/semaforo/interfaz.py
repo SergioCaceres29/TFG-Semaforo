@@ -32,12 +32,16 @@ from semaforo.modelos import (
     EstadoSemaforo,
     MensajeInterfaz,
     ProgresoEjecucion,
+    Parametros,
     Zona,
 )
 from semaforo.nucleo import (
+    ETIQUETAS_PARAMETROS,
+    PARAMETROS_INICIALES,
     GestorZonas,
     VideoCargado,
     cargar_video,
+    configurar_parametros,
     crear_gestor_zonas,
     validar_videos_carriles,
     vista_previa,
@@ -726,9 +730,13 @@ class InterfazPrincipal(tk.Tk):
         apilado.pack(fill="both", expand=True)
         apilado.rowconfigure(0, weight=1)
         apilado.columnconfigure(0, weight=1)
-        self._vistas: dict[str, tk.Frame] = {"panel": self._crear_vista_panel(apilado)}
-        for modulo in MODULOS[1:]:
-            self._vistas[modulo.clave] = self._crear_vista_pendiente(apilado, modulo)
+        self._vistas: dict[str, tk.Frame] = {
+            "panel": self._crear_vista_panel(apilado),
+            "parametros": self._crear_vista_parametros(apilado),
+        }
+        for modulo in MODULOS:
+            if modulo.clave not in self._vistas:
+                self._vistas[modulo.clave] = self._crear_vista_pendiente(apilado, modulo)
         for vista in self._vistas.values():
             vista.grid(row=0, column=0, sticky="nsew")
 
@@ -764,6 +772,57 @@ class InterfazPrincipal(tk.Tk):
         self._progreso.pack(side="right", padx=(0, 14))
         self._actualizar_botones(EstadoReproduccion.SIN_INICIAR)
         return barra
+
+    def _crear_vista_parametros(self, padre: tk.Frame) -> tk.Frame:
+        """RF-10: formulario con los seis parámetros de la ejecución."""
+        vista = tk.Frame(padre, bg=COLOR_FONDO)
+        tarjeta = tk.Frame(vista, bg=COLOR_TARJETA, padx=28, pady=24)
+        tarjeta.pack(anchor="nw")
+        tk.Label(tarjeta, text="Se aplican a la próxima ejecución.", font=(FUENTE, 10),
+                 bg=COLOR_TARJETA, fg=COLOR_TEXTO_SUAVE).grid(row=0, column=0, columnspan=2,
+                                                              sticky="w", pady=(0, 14))
+        self.campos_parametros: dict[str, tk.Entry] = {}
+        for fila, (campo, etiqueta) in enumerate(ETIQUETAS_PARAMETROS.items(), start=1):
+            tk.Label(tarjeta, text=etiqueta, font=(FUENTE, 10), bg=COLOR_TARJETA,
+                     fg=COLOR_TEXTO).grid(row=fila, column=0, sticky="w", pady=4, padx=(0, 18))
+            entrada = tk.Entry(tarjeta, width=10, font=(FUENTE, 10), bg=COLOR_SUPERFICIE,
+                               fg=COLOR_TEXTO, insertbackground=COLOR_TEXTO, relief="flat")
+            entrada.grid(row=fila, column=1, sticky="w", pady=4, ipady=3)
+            self.campos_parametros[campo] = entrada
+        acciones = tk.Frame(tarjeta, bg=COLOR_TARJETA)
+        acciones.grid(row=len(ETIQUETAS_PARAMETROS) + 1, column=0, columnspan=2, sticky="w",
+                      pady=(16, 0))
+        BotonPlano(acciones, "Guardar parámetros", self.guardar_parametros,
+                   primario=True).pack(side="left")
+        self._estado_parametros = tk.Label(acciones, font=(FUENTE, 9), bg=COLOR_TARJETA,
+                                           fg=COLOR_TEXTO_SUAVE)
+        self._estado_parametros.pack(side="left", padx=14)
+        self._parametros = PARAMETROS_INICIALES
+        self._mostrar_parametros(self._parametros)
+        return vista
+
+    @property
+    def parametros(self) -> Parametros:
+        """RF-10: parámetros vigentes para la próxima ejecución."""
+        return self._parametros
+
+    def guardar_parametros(self) -> None:
+        """RF-10 (CP-10): guarda los válidos; ante uno inválido avisa y conserva los anteriores."""
+        textos = {campo: entrada.get() for campo, entrada in self.campos_parametros.items()}
+        try:
+            self._parametros = configurar_parametros(textos)
+        except ErrorConfiguracion as error:
+            registro.warning("%s", error)
+            messagebox.showerror("Parámetro inválido", str(error))
+            return
+        self._mostrar_parametros(self._parametros)
+        self._estado_parametros.configure(text="Parámetros guardados",
+                                          fg=LUZ_ENCENDIDA[EstadoSemaforo.VERDE])
+
+    def _mostrar_parametros(self, parametros: Parametros) -> None:
+        for campo, entrada in self.campos_parametros.items():
+            entrada.delete(0, "end")
+            entrada.insert(0, str(getattr(parametros, campo)))
 
     def _crear_vista_pendiente(self, padre: tk.Frame, modulo: Modulo) -> tk.Frame:
         vista = tk.Frame(padre, bg=COLOR_FONDO)

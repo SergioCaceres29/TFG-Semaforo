@@ -20,7 +20,7 @@ from semaforo.interfaz import (
     formatear_tiempo,
     rectangulo_video,
 )
-from semaforo.nucleo import crear_gestor_zonas
+from semaforo.nucleo import PARAMETROS_INICIALES, crear_gestor_zonas
 from semaforo.modelos import (
     POSICIONES_CARRIL,
     CambioFase,
@@ -104,6 +104,38 @@ class VentanaOculta(unittest.TestCase):
         tarjeta = self.ventana.tarjetas[posicion]
         tarjeta.seleccionar_archivo(ruta)
         tarjeta.cargar_video()
+
+
+class TestParametrosVentana(VentanaOculta):
+    """RF-10 desde la ventana del operador."""
+
+    def escribir(self, campo: str, texto: str) -> None:
+        entrada = self.ventana.campos_parametros[campo]
+        entrada.delete(0, "end")
+        entrada.insert(0, texto)
+
+    def test_cp10_formulario_arranca_con_los_valores_iniciales(self):
+        """RF-10: la vista muestra los seis parámetros con sus valores iniciales."""
+        self.assertEqual(self.ventana.parametros, PARAMETROS_INICIALES)
+        self.assertEqual(self.ventana.campos_parametros["verde_max"].get(),
+                         str(PARAMETROS_INICIALES.verde_max))
+        self.assertEqual(len(self.ventana.campos_parametros), 6)
+
+    def test_cp10_guarda_valores_validos(self):
+        """RF-10: al guardar valores válidos quedan vigentes para la próxima ejecución."""
+        self.escribir("verde_max", "45")
+        self.escribir("umbral_confianza", "0,6")
+        self.ventana.guardar_parametros()
+        self.mostrar_error.assert_not_called()
+        self.assertEqual((self.ventana.parametros.verde_max,
+                          self.ventana.parametros.umbral_confianza), (45, 0.6))
+
+    def test_cp10_rechaza_invalidos_y_conserva_los_anteriores(self):
+        """RF-10 / RNF-05: un valor inválido muestra un mensaje y no cambia lo vigente."""
+        self.escribir("verde_max", "5")
+        self.ventana.guardar_parametros()
+        self.mostrar_error.assert_called_once()
+        self.assertEqual(self.ventana.parametros, PARAMETROS_INICIALES)
 
 
 class TestCargaVideos(VentanaOculta):
