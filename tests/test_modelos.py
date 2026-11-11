@@ -2,7 +2,7 @@
 
 import unittest
 
-from semaforo.modelos import POSICIONES_CARRIL, ActualizacionCarril, Clase
+from semaforo.modelos import POSICIONES_CARRIL, ActualizacionCarril, Clase, EstadoEjecucion
 
 
 class TestModelos(unittest.TestCase):
@@ -19,6 +19,11 @@ class TestModelos(unittest.TestCase):
         """CLAUDE.md §6: demanda de un carril = suma de las tres clases."""
         actualizacion = ActualizacionCarril(1, {Clase.AUTO: 4, Clase.MOTO: 2, Clase.CAMION: 1})
         self.assertEqual(actualizacion.demanda, 7)
+
+    def test_estados_de_ejecucion_sin_pausada(self):
+        """Figura 10 / Tabla 18: Creada, EnEjecucion, Finalizada o Abortada; sin Pausada."""
+        self.assertEqual([e.value for e in EstadoEjecucion],
+                         ["Creada", "EnEjecucion", "Finalizada", "Abortada"])
 
 
 if __name__ == "__main__":

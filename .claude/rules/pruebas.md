@@ -11,4 +11,6 @@ paths:
 - Datos de prueba pequeños en `tests/datos/` (un mp4 de pocos segundos, un archivo .mp4 corrupto, un .avi). Nunca usar videos de validación ni el dataset.
 - Las pruebas de `deteccion.py` que necesitan `best.pt` se saltan automáticamente si el archivo no existe.
 - No borrar ni debilitar una prueba para que pase. Si una prueba parece incorrecta, avisar y explicar por qué.
-- Al terminar una HU, mostrar la salida real de las pruebas (cantidad de aprobadas/fallidas).
+- Al terminar una HU, mostrar la salida real de las pruebas (cantidad de aprobadas/fallidas) y de `ruff`.
+- Los CP válidos son CP-01..CP-27 (Tabla 33 del TFG, mapa en `docs/specs/requisitos.md`). CP-16 = demostración (RF-16), CP-27 = comparación con el ciclo fijo (RF-17).
+- HU-08 se prueba con conteos simulados (sin detector). La demostración se prueba con planes de cambios de fase conocidos y verificando que la base no cambia.

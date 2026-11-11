@@ -13,6 +13,7 @@ from unittest import mock
 from semaforo.interfaz import (
     LUZ_APAGADA,
     LUZ_ENCENDIDA,
+    EstadoReproduccion,
     InterfazPrincipal,
     SimuladorDemostracion,
     color_luz,
@@ -40,7 +41,7 @@ def recorrer_demostracion(duracion: float) -> list:
 
 class TestPresentacion(unittest.TestCase):
     def test_solo_la_luz_del_estado_vigente_esta_encendida(self):
-        """RF-09: el semáforo muestra un único estado."""
+        """RF-16: el semáforo muestra un único estado."""
         for luz in EstadoSemaforo:
             esperado = LUZ_ENCENDIDA[luz] if luz is EstadoSemaforo.AMARILLO else LUZ_APAGADA[luz]
             self.assertEqual(color_luz(luz, EstadoSemaforo.AMARILLO), esperado)
@@ -147,6 +148,24 @@ class TestCargaVideos(VentanaOculta):
             self.cargar(posicion, crear_mp4(self.carpeta / f"carril{posicion}.mp4", fps=fps))
         self.mostrar_error.assert_called_once()
         self.assertFalse(self.ventana.boton_iniciar.habilitado)
+
+    def test_cp16_pausar_y_detener_solo_cambian_la_reproduccion(self):
+        """HU-09 CA-03 / RF-16: pausar, reanudar y detener actúan sobre la reproducción.
+
+        Demostración provisional: verifica el estado de la interfaz; que la base no
+        cambie se prueba cuando exista GestorDemostracion (HU-09).
+        """
+        for posicion in POSICIONES_CARRIL:
+            self.cargar(posicion, crear_mp4(self.carpeta / f"carril{posicion}.mp4"))
+        self.ventana.boton_iniciar.invoke()
+        self.assertIs(self.ventana.estado_reproduccion, EstadoReproduccion.REPRODUCIENDO)
+        self.ventana.alternar_pausa()
+        self.assertIs(self.ventana.estado_reproduccion, EstadoReproduccion.PAUSADA)
+        self.ventana.alternar_pausa()
+        self.assertIs(self.ventana.estado_reproduccion, EstadoReproduccion.REPRODUCIENDO)
+        self.ventana.detener_demo()
+        self.assertIs(self.ventana.estado_reproduccion, EstadoReproduccion.DETENIDA)
+        self.assertTrue(self.ventana.boton_iniciar.habilitado)
 
 
 class TestZonasVirtuales(VentanaOculta):

@@ -32,11 +32,10 @@ class EstadoSemaforo(Enum):
 
 
 class EstadoEjecucion(Enum):
-    """RF-16: ciclo de vida de una ejecución."""
+    """Figura 10: ciclo de vida de una ejecución. La demostración no lo modifica (sin Pausada)."""
 
     CREADA = "Creada"
     EN_EJECUCION = "EnEjecucion"
-    PAUSADA = "Pausada"
     FINALIZADA = "Finalizada"
     ABORTADA = "Abortada"
 
@@ -84,7 +83,7 @@ class Zona:
 
 @dataclass(frozen=True)
 class CambioFase:
-    """RF-08, RF-09: estados de los tres carriles después de una transición."""
+    """RF-08, RF-16: estados de los tres carriles después de una transición (segundos de simulación)."""
 
     marca_tiempo: float
     estados: dict[int, EstadoSemaforo]
@@ -105,7 +104,7 @@ class ActualizacionCarril:
 
 @dataclass(frozen=True)
 class ProgresoEjecucion:
-    """RF-16: avance de la ejecución en segundos del video."""
+    """CU-02, RF-16: avance en segundos (del video en el análisis, de simulación en la demostración)."""
 
     marca_tiempo: float
     duracion: float
