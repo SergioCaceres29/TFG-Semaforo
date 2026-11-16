@@ -70,6 +70,18 @@ class MetadatosVideo:
         return f"{self.ancho}x{self.alto}"
 
 
+Vertice = tuple[int, int]
+
+
+@dataclass(frozen=True)
+class Zona:
+    """RF-02: zona virtual del video de un carril, con vértices en píxeles del video."""
+
+    nombre_carril: str
+    vertices: tuple[Vertice, ...]
+    id_zona: int | None = None
+
+
 @dataclass(frozen=True)
 class CambioFase:
     """RF-08, RF-09: estados de los tres carriles después de una transición."""

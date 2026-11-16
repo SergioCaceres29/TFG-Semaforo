@@ -19,6 +19,7 @@ from semaforo.interfaz import (
     formatear_tiempo,
     rectangulo_video,
 )
+from semaforo.nucleo import crear_gestor_zonas
 from semaforo.modelos import (
     POSICIONES_CARRIL,
     CambioFase,
@@ -79,12 +80,12 @@ class TestSimuladorDemostracion(unittest.TestCase):
         self.assertIs(progresos[-1].estado, EstadoEjecucion.FINALIZADA)
 
 
-class TestCargaVideos(unittest.TestCase):
-    """HU-01 desde la ventana del operador (los mensajes de error se interceptan)."""
+class VentanaOculta(unittest.TestCase):
+    """Ventana del operador oculta, con base en memoria y mensajes de error interceptados."""
 
     def setUp(self):
         try:
-            self.ventana = InterfazPrincipal()
+            self.ventana = InterfazPrincipal(crear_gestor_zonas(":memory:"))
         except tk.TclError as error:
             self.skipTest(f"Sin entorno gráfico: {error}")
         self.ventana.withdraw()
@@ -102,6 +103,10 @@ class TestCargaVideos(unittest.TestCase):
         tarjeta = self.ventana.tarjetas[posicion]
         tarjeta.seleccionar_archivo(ruta)
         tarjeta.cargar_video()
+
+
+class TestCargaVideos(VentanaOculta):
+    """HU-01 desde la ventana del operador."""
 
     def test_cp01_ca01_seleccion_muestra_ruta_y_habilita_carga(self):
         """HU-01 CA-01 / RF-01: al seleccionar el archivo se ve la ruta y se habilita Cargar."""
@@ -142,6 +147,83 @@ class TestCargaVideos(unittest.TestCase):
             self.cargar(posicion, crear_mp4(self.carpeta / f"carril{posicion}.mp4", fps=fps))
         self.mostrar_error.assert_called_once()
         self.assertFalse(self.ventana.boton_iniciar.habilitado)
+
+
+class TestZonasVirtuales(VentanaOculta):
+    """HU-02 desde la ventana del operador, con un video cargado en cada carril."""
+
+    TRIANGULO = ((100, 100), (1800, 100), (960, 1000))
+
+    def setUp(self):
+        super().setUp()
+        for posicion in POSICIONES_CARRIL:
+            self.cargar(posicion, crear_mp4(self.carpeta / f"carril{posicion}.mp4",
+                                            ancho=1920, alto=1080, cuadros=3))
+
+    def trazar(self, posicion: int, nombre: str, vertices=TRIANGULO):
+        editor = self.ventana.tarjetas[posicion].abrir_editor_zona()
+        for x, y in vertices:
+            editor.agregar_vertice(x, y)
+        editor.nombre_carril = nombre
+        editor.confirmar()
+        return editor
+
+    def test_cp02_ca01_editor_dibuja_poligono_y_pide_nombre(self):
+        """HU-02 CA-01 / RF-02: los vértices marcados forman el polígono; se pide el nombre."""
+        tarjeta = self.ventana.tarjetas[1]
+        self.assertTrue(tarjeta.boton_zona.habilitado)
+        editor = tarjeta.abrir_editor_zona()
+        for x, y in self.TRIANGULO:
+            editor.agregar_vertice(x, y)
+        self.assertEqual(editor.vertices, list(self.TRIANGULO))
+        self.assertTrue(editor.lienzo.find_withtag("poligono"))
+        self.assertTrue(editor.entrada_nombre.winfo_exists())
+        editor.destroy()
+
+    def test_cp02_ca02_ca03_confirmar_guarda_la_zona_del_carril(self):
+        """HU-02 CA-03: al confirmar, la zona queda asociada al video del carril."""
+        self.trazar(1, "Ruta 14")
+        tarjeta = self.ventana.tarjetas[1]
+        self.assertEqual(tarjeta.zona.vertices, self.TRIANGULO)
+        self.assertIn("Ruta 14", tarjeta.texto_titulo)
+        self.mostrar_error.assert_not_called()
+
+    def test_cp02_ca02_nombre_repetido_o_pocos_vertices_no_se_guarda(self):
+        """HU-02 CA-02: nombre repetido entre carriles o < 3 vértices → mensaje, sin guardar."""
+        self.trazar(1, "Norte")
+        repetido = self.trazar(2, "norte")
+        corto = self.trazar(3, "Sur", vertices=self.TRIANGULO[:2])
+        self.assertEqual(self.mostrar_error.call_count, 2)
+        self.assertIsNone(self.ventana.tarjetas[2].zona)
+        self.assertIsNone(self.ventana.tarjetas[3].zona)
+        self.assertTrue(repetido.winfo_exists() and corto.winfo_exists())
+
+    def test_cp02_ca04_editar_vertice_conserva_las_otras_zonas(self):
+        """HU-02 CA-04: se mueve un vértice de una zona sin tocar las demás."""
+        self.trazar(1, "Norte")
+        self.trazar(2, "Sur")
+        editor = self.ventana.tarjetas[1].abrir_editor_zona()
+        self.assertEqual(editor.vertices, list(self.TRIANGULO))
+        editor.mover_vertice(0, 300, 300)
+        editor.confirmar()
+        self.assertEqual(self.ventana.tarjetas[1].zona.vertices[0], (300, 300))
+        self.assertEqual(self.ventana.tarjetas[2].zona.vertices, self.TRIANGULO)
+
+    def test_cp02_ca04_eliminar_una_zona_conserva_las_demas(self):
+        """HU-02 CA-04: se elimina la zona de un carril sin redefinir las otras."""
+        self.trazar(1, "Norte")
+        self.trazar(2, "Sur")
+        with mock.patch("semaforo.interfaz.messagebox.askyesno", return_value=True):
+            self.ventana.tarjetas[1].eliminar_zona()
+        self.assertIsNone(self.ventana.tarjetas[1].zona)
+        self.assertFalse(self.ventana.tarjetas[1].boton_eliminar_zona.habilitado)
+        self.assertEqual(self.ventana.tarjetas[2].zona.nombre_carril, "Sur")
+
+    def test_cp03_zona_guardada_reaparece_al_volver_a_cargar_el_video(self):
+        """RF-03: al recargar el mismo video su zona se recupera sin redefinirla."""
+        self.trazar(1, "Norte")
+        self.cargar(1, self.carpeta / "carril1.mp4")
+        self.assertEqual(self.ventana.tarjetas[1].zona.nombre_carril, "Norte")
 
 
 if __name__ == "__main__":

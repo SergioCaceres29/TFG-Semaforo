@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from semaforo.modelos import ErrorVideo, MetadatosVideo
-from semaforo.nucleo import cargar_video, validar_videos_carriles
+from semaforo.modelos import ErrorConfiguracion, ErrorVideo, MetadatosVideo, Zona
+from semaforo.nucleo import cargar_video, crear_gestor_zonas, validar_videos_carriles
 from tests.fabrica_videos import CUADROS_PRUEBA, FPS_PRUEBA, crear_mp4
 
 
@@ -44,6 +44,30 @@ class TestCargarVideo(unittest.TestCase):
             cargado = cargar_video(crear_mp4(Path(carpeta) / "carril1.mp4"))
         self.assertAlmostEqual(cargado.metadatos.duracion, CUADROS_PRUEBA / FPS_PRUEBA, places=2)
         self.assertEqual(cargado.primer_cuadro.ndim, 3)
+
+
+class TestGestorZonas(unittest.TestCase):
+    TRIANGULO = ((0, 0), (100, 0), (50, 80))
+
+    def setUp(self):
+        self.gestor = crear_gestor_zonas(":memory:")
+        self.id_video = self.gestor.registrar_video(metadatos())
+
+    def tearDown(self):
+        self.gestor.cerrar()
+
+    def test_cp02_ca02_rechaza_zona_invalida_sin_guardarla(self):
+        """HU-02 CA-02: con nombre repetido entre carriles no se guarda nada."""
+        with self.assertRaises(ErrorConfiguracion):
+            self.gestor.guardar_zona(self.id_video, Zona("Norte", self.TRIANGULO), ["Norte"])
+        self.assertIsNone(self.gestor.zona_guardada(self.id_video))
+
+    def test_cp03_ca03_zona_guardada_se_recupera_al_registrar_de_nuevo_el_video(self):
+        """HU-02 CA-03 / RF-03: la zona queda asociada al video y se reutiliza."""
+        guardada = self.gestor.guardar_zona(self.id_video, Zona(" Norte ", self.TRIANGULO), [])
+        self.assertEqual(guardada.nombre_carril, "Norte")
+        id_video = self.gestor.registrar_video(metadatos())
+        self.assertEqual(self.gestor.zona_guardada(id_video), guardada)
 
 
 if __name__ == "__main__":

@@ -1,24 +1,29 @@
 """Núcleo (CU-02): único módulo que coordina a los demás.
 
-Por ahora cubre la carga y validación de los tres videos (HU-01). `GestorEjecucion`
-y el bucle de cuadros se agregan en la integración (Sprint 4).
+Por ahora cubre la carga y validación de los tres videos (HU-01) y la definición y
+persistencia de sus zonas (HU-02). `GestorEjecucion` y el bucle de cuadros se
+agregan en la integración (Sprint 4).
 """
 
 from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
 
 from semaforo.captura import LectorVideo
-from semaforo.modelos import NUM_CARRILES, POSICIONES_CARRIL, ErrorVideo, MetadatosVideo
+from semaforo.configuracion import validar_zona
+from semaforo.modelos import NUM_CARRILES, POSICIONES_CARRIL, ErrorVideo, MetadatosVideo, Zona
+from semaforo.persistencia import RepositorioSQLite
 from semaforo.visualizacion import Visualizador
 
 registro = logging.getLogger(__name__)
+
+RUTA_BASE_DATOS = Path("datos") / "db" / "semaforo.db"
 
 TOLERANCIA_FPS = 1e-3
 """Diferencia relativa de fps que se considera redondeo del contenedor (29.97 ≈ 29.97003)."""
@@ -70,3 +75,40 @@ def validar_videos_carriles(metadatos: Mapping[int, MetadatosVideo]) -> float:
         registro.info("Duraciones distintas: se procesará hasta %.1f s (el video más corto).",
                       duracion)
     return duracion
+
+
+class GestorZonas:
+    """HU-02 (RF-02, RF-03): valida las zonas del operador y las guarda por video."""
+
+    def __init__(self, repositorio: RepositorioSQLite) -> None:
+        self._repositorio = repositorio
+
+    def registrar_video(self, metadatos: MetadatosVideo) -> int:
+        """RF-03: id del video en la base (lo da de alta la primera vez)."""
+        return self._repositorio.registrar_video(metadatos)
+
+    def zona_guardada(self, id_video: int) -> Zona | None:
+        """RF-03: zona definida antes para el video, para reutilizarla sin redefinirla."""
+        return self._repositorio.obtener_zona(id_video)
+
+    def guardar_zona(self, id_video: int, zona: Zona, nombres_otros_carriles: Iterable[str]) -> Zona:
+        """HU-02 CA-02, CA-03: valida la zona y la guarda asociada al video."""
+        valida = validar_zona(zona, nombres_otros_carriles)
+        id_zona = self._repositorio.guardar_zona(id_video, valida)
+        registro.info("Zona «%s» guardada (video %d, %d vértices)", valida.nombre_carril, id_video,
+                      len(valida.vertices))
+        return replace(valida, id_zona=id_zona)
+
+    def eliminar_zona(self, id_video: int) -> None:
+        """HU-02 CA-04: elimina la zona del video sin tocar las demás."""
+        self._repositorio.eliminar_zona(id_video)
+        registro.info("Zona del video %d eliminada", id_video)
+
+    def cerrar(self) -> None:
+        """Cierra la base de datos."""
+        self._repositorio.cerrar()
+
+
+def crear_gestor_zonas(ruta: Path | str = RUTA_BASE_DATOS) -> GestorZonas:
+    """Gestor de zonas sobre la base indicada (las pruebas usan ":memory:")."""
+    return GestorZonas(RepositorioSQLite(ruta))

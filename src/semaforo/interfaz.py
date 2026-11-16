@@ -24,13 +24,22 @@ from semaforo.modelos import (
     ActualizacionCarril,
     CambioFase,
     Clase,
+    ErrorConfiguracion,
     ErrorVideo,
     EstadoEjecucion,
     EstadoSemaforo,
     MensajeInterfaz,
     ProgresoEjecucion,
+    Zona,
 )
-from semaforo.nucleo import VideoCargado, cargar_video, validar_videos_carriles, vista_previa
+from semaforo.nucleo import (
+    GestorZonas,
+    VideoCargado,
+    cargar_video,
+    crear_gestor_zonas,
+    validar_videos_carriles,
+    vista_previa,
+)
 
 registro = logging.getLogger(__name__)
 
@@ -47,6 +56,7 @@ COLOR_ACENTO = "#4f8cff"
 COLOR_ACENTO_HOVER = "#6b9fff"
 COLOR_CARCASA = "#0a0b0e"
 COLOR_VIDEO = "#101217"
+COLOR_ZONA = "#38d9f5"
 
 LUZ_ENCENDIDA = {
     EstadoSemaforo.ROJO: "#ff4d4d",
@@ -84,6 +94,11 @@ ANCHO_BARRA_LATERAL = 230
 TAMANO_VENTANA = "1500x860"
 TAMANO_MINIMO = (1200, 720)
 PERIODO_COLA_MS = 50
+
+# --- Editor de zonas (HU-02) -----------------------------------------------------
+FRACCION_PANTALLA_EDITOR = 0.75
+RADIO_VERTICE = 6
+GROSOR_ZONA = 2
 
 # --- Demostración (provisional, se reemplaza por GestorEjecucion) ---------------
 DEMO_TICK_MS = 100
@@ -145,6 +160,12 @@ def rectangulo_video(ancho: int, alto: int) -> tuple[int, int, int, int]:
     x = (ancho - ancho_video) // 2
     y = (alto - alto_video) // 2
     return x, y, x + ancho_video, y + alto_video
+
+
+def coordenadas_lienzo(vertices: list[tuple[float, float]] | tuple[tuple[int, int], ...],
+                       escala: float, origen_x: float = 0, origen_y: float = 0) -> list[float]:
+    """Vértices en píxeles del video → lista plana de coordenadas del lienzo."""
+    return [c for x, y in vertices for c in (origen_x + x * escala, origen_y + y * escala)]
 
 
 class SimuladorDemostracion:
@@ -272,17 +293,143 @@ class SemaforoVisual(tk.Canvas):
             self.itemconfigure(self._halos[luz], outline=halo)
 
 
+class EditorZona(tk.Toplevel):
+    """HU-02 CA-01, CA-04: trazado y edición de la zona virtual sobre el primer cuadro.
+
+    Clic izquierdo agrega un vértice (o lo arrastra si se hace sobre uno existente) y
+    clic derecho lo quita. Los vértices se guardan en píxeles del video original.
+    """
+
+    def __init__(self, padre: tk.Misc, titulo: str, cuadro, zona: Zona | None,
+                 al_confirmar: Callable[[Zona], bool]) -> None:
+        super().__init__(padre, bg=COLOR_FONDO, padx=16, pady=16)
+        self.title(titulo)
+        self.transient(padre.winfo_toplevel())
+        self._al_confirmar = al_confirmar
+        self._alto_video, self._ancho_video = cuadro.shape[:2]
+        self._escala = min(1.0, FRACCION_PANTALLA_EDITOR * self.winfo_screenwidth() / self._ancho_video,
+                           FRACCION_PANTALLA_EDITOR * self.winfo_screenheight() / self._alto_video)
+        self.vertices: list[tuple[float, float]] = list(zona.vertices) if zona else []
+        self._arrastrado: int | None = None
+        self._crear_lienzo(cuadro)
+        self._crear_controles(zona.nombre_carril if zona else "")
+        self._redibujar()
+
+    def _crear_lienzo(self, cuadro) -> None:
+        ancho, alto = round(self._ancho_video * self._escala), round(self._alto_video * self._escala)
+        self.lienzo = tk.Canvas(self, width=ancho, height=alto, highlightthickness=0, cursor="crosshair")
+        self.lienzo.pack()
+        self._imagen = tk.PhotoImage(master=self, data=vista_previa(cuadro, ancho, alto), format="ppm")
+        self.lienzo.create_image(0, 0, image=self._imagen, anchor="nw")
+        self.lienzo.bind("<ButtonPress-1>", self._presionar)
+        self.lienzo.bind("<B1-Motion>", self._arrastrar)
+        self.lienzo.bind("<ButtonRelease-1>", lambda _e: setattr(self, "_arrastrado", None))
+        self.lienzo.bind("<Button-3>", self._quitar_con_clic)
+
+    def _crear_controles(self, nombre: str) -> None:
+        fila = tk.Frame(self, bg=COLOR_FONDO)
+        fila.pack(fill="x", pady=(12, 0))
+        tk.Label(fila, text="Nombre del carril", font=(FUENTE, 10), bg=COLOR_FONDO,
+                 fg=COLOR_TEXTO).pack(side="left")
+        self._nombre = tk.StringVar(self, value=nombre)
+        self.entrada_nombre = tk.Entry(fila, textvariable=self._nombre, font=(FUENTE, 10), width=24,
+                                       bg=COLOR_SUPERFICIE, fg=COLOR_TEXTO, insertbackground=COLOR_TEXTO,
+                                       relief="flat")
+        self.entrada_nombre.pack(side="left", padx=(10, 0), ipady=4)
+        BotonPlano(fila, "Guardar zona", self.confirmar, primario=True).pack(side="right")
+        BotonPlano(fila, "Cancelar", self.destroy).pack(side="right", padx=(0, 8))
+        BotonPlano(fila, "Limpiar", self._limpiar).pack(side="right", padx=(0, 8))
+        tk.Label(self, text="Clic izquierdo: agregar o arrastrar vértice · Clic derecho: quitar vértice",
+                 font=(FUENTE, 9), bg=COLOR_FONDO, fg=COLOR_TEXTO_SUAVE).pack(anchor="w", pady=(8, 0))
+
+    @property
+    def nombre_carril(self) -> str:
+        return self._nombre.get()
+
+    @nombre_carril.setter
+    def nombre_carril(self, nombre: str) -> None:
+        self._nombre.set(nombre)
+
+    def agregar_vertice(self, x: float, y: float) -> None:
+        """HU-02 CA-01: agrega un vértice (en píxeles del video) al final del polígono."""
+        self.vertices.append(self._dentro_del_cuadro(x, y))
+        self._redibujar()
+
+    def mover_vertice(self, indice: int, x: float, y: float) -> None:
+        """HU-02 CA-04: cambia la posición de un vértice existente."""
+        self.vertices[indice] = self._dentro_del_cuadro(x, y)
+        self._redibujar()
+
+    def quitar_vertice(self, indice: int) -> None:
+        """HU-02 CA-04: elimina un vértice del polígono."""
+        del self.vertices[indice]
+        self._redibujar()
+
+    def confirmar(self) -> None:
+        """HU-02 CA-03: entrega la zona; si es válida se cierra el editor."""
+        zona = Zona(self.nombre_carril, tuple((round(x), round(y)) for x, y in self.vertices))
+        if self._al_confirmar(zona):
+            self.destroy()
+
+    def _limpiar(self) -> None:
+        self.vertices.clear()
+        self._redibujar()
+
+    def _dentro_del_cuadro(self, x: float, y: float) -> tuple[float, float]:
+        return min(max(x, 0), self._ancho_video - 1), min(max(y, 0), self._alto_video - 1)
+
+    def _vertice_en(self, x_lienzo: float, y_lienzo: float) -> int | None:
+        radio = RADIO_VERTICE / self._escala
+        x, y = x_lienzo / self._escala, y_lienzo / self._escala
+        for indice, (vx, vy) in enumerate(self.vertices):
+            if abs(vx - x) <= radio and abs(vy - y) <= radio:
+                return indice
+        return None
+
+    def _presionar(self, evento: tk.Event) -> None:
+        self._arrastrado = self._vertice_en(evento.x, evento.y)
+        if self._arrastrado is None:
+            self.agregar_vertice(evento.x / self._escala, evento.y / self._escala)
+
+    def _arrastrar(self, evento: tk.Event) -> None:
+        if self._arrastrado is not None:
+            self.mover_vertice(self._arrastrado, evento.x / self._escala, evento.y / self._escala)
+
+    def _quitar_con_clic(self, evento: tk.Event) -> None:
+        indice = self._vertice_en(evento.x, evento.y)
+        if indice is not None:
+            self.quitar_vertice(indice)
+
+    def _redibujar(self) -> None:
+        self.lienzo.delete("zona")
+        puntos = coordenadas_lienzo(self.vertices, self._escala)
+        if len(self.vertices) >= 3:
+            self.lienzo.create_polygon(puntos, outline=COLOR_ZONA, fill="", width=GROSOR_ZONA,
+                                       tags=("zona", "poligono"))
+        elif len(self.vertices) == 2:
+            self.lienzo.create_line(puntos, fill=COLOR_ZONA, width=GROSOR_ZONA, tags="zona")
+        for x, y in zip(puntos[::2], puntos[1::2]):
+            self.lienzo.create_oval(x - RADIO_VERTICE, y - RADIO_VERTICE, x + RADIO_VERTICE,
+                                    y + RADIO_VERTICE, fill=COLOR_ZONA, outline=COLOR_CARCASA,
+                                    tags="zona")
+
+
 class TarjetaCarril(tk.Frame):
     """Tarjeta de un carril: video, semáforo, conteo por clase y acciones."""
 
-    def __init__(self, padre: tk.Misc, posicion: int, escala: float,
-                 al_cambiar_video: Callable[[], None]) -> None:
+    def __init__(self, padre: tk.Misc, posicion: int, escala: float, gestor_zonas: GestorZonas,
+                 al_cambiar_video: Callable[[], None],
+                 nombres_otros_carriles: Callable[[int], list[str]]) -> None:
         super().__init__(padre, bg=COLOR_TARJETA, highlightthickness=2,
                          highlightbackground=COLOR_TARJETA, padx=14, pady=12)
         self.posicion = posicion
         self.ruta_video: Path | None = None
         self.video: VideoCargado | None = None
+        self.id_video: int | None = None
+        self.zona: Zona | None = None
+        self._gestor_zonas = gestor_zonas
         self._al_cambiar_video = al_cambiar_video
+        self._nombres_otros_carriles = nombres_otros_carriles
         self._imagen: tk.PhotoImage | None = None
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
@@ -295,8 +442,9 @@ class TarjetaCarril(tk.Frame):
     def _crear_encabezado(self) -> None:
         encabezado = tk.Frame(self, bg=COLOR_TARJETA)
         encabezado.grid(row=0, column=0, sticky="ew", pady=(0, 10))
-        tk.Label(encabezado, text=f"Carril {self.posicion}", font=(FUENTE, 13, "bold"),
-                 bg=COLOR_TARJETA, fg=COLOR_TEXTO).pack(side="left")
+        self._etiqueta_titulo = tk.Label(encabezado, text=f"Carril {self.posicion}",
+                                         font=(FUENTE, 13, "bold"), bg=COLOR_TARJETA, fg=COLOR_TEXTO)
+        self._etiqueta_titulo.pack(side="left")
         self._etiqueta_estado = tk.Label(encabezado, font=(FUENTE, 9, "bold"), bg=COLOR_SUPERFICIE,
                                          padx=10, pady=2)
         self._etiqueta_estado.pack(side="right")
@@ -347,9 +495,17 @@ class TarjetaCarril(tk.Frame):
         self.boton_cargar = BotonPlano(fila, "Cargar", self.cargar_video, primario=True)
         self.boton_cargar.habilitar(False)
         self.boton_cargar.pack(side="left", padx=(8, 0))
-        zona = BotonPlano(fila, "Trazar zona", lambda: None)
-        zona.habilitar(False)
-        zona.pack(side="left", padx=(8, 0))
+        fila_zona = tk.Frame(self, bg=COLOR_TARJETA)
+        fila_zona.grid(row=5, column=0, sticky="ew", pady=(8, 0))
+        self.boton_zona = BotonPlano(fila_zona, "Trazar zona", self.abrir_editor_zona)
+        self.boton_zona.pack(side="left")
+        self.boton_eliminar_zona = BotonPlano(fila_zona, "Eliminar zona", self.eliminar_zona)
+        self.boton_eliminar_zona.pack(side="left", padx=(8, 0))
+        self._mostrar_zona()
+
+    @property
+    def texto_titulo(self) -> str:
+        return self._etiqueta_titulo.cget("text")
 
     @property
     def texto_ruta(self) -> str:
@@ -387,14 +543,58 @@ class TarjetaCarril(tk.Frame):
         self._etiqueta_metadatos.configure(
             text=f"{metadatos.resolucion} · {metadatos.fps:.2f} fps · "
                  f"{formatear_tiempo(metadatos.duracion)}")
-        self._dibujar_video()
+        self.id_video = self._gestor_zonas.registrar_video(metadatos)
+        self.zona = self._gestor_zonas.zona_guardada(self.id_video)
+        self._mostrar_zona()
         self._al_cambiar_video()
 
     def _descartar_video(self) -> None:
         self.video = None
+        self.id_video = None
+        self.zona = None
         self._etiqueta_metadatos.configure(text="")
-        self._dibujar_video()
+        self._mostrar_zona()
         self._al_cambiar_video()
+
+    def abrir_editor_zona(self) -> EditorZona | None:
+        """HU-02 CA-01, CA-04: abre el trazado sobre el primer cuadro con la zona vigente."""
+        if self.video is None:
+            return None
+        return EditorZona(self, f"Zona virtual · Carril {self.posicion}", self.video.primer_cuadro,
+                          self.zona, self._confirmar_zona)
+
+    def _confirmar_zona(self, zona: Zona) -> bool:
+        """HU-02 CA-02, CA-03: guarda la zona; si no es válida avisa y deja seguir editando."""
+        try:
+            self.zona = self._gestor_zonas.guardar_zona(
+                self.id_video, zona, self._nombres_otros_carriles(self.posicion))
+        except ErrorConfiguracion as error:
+            messagebox.showerror(f"Carril {self.posicion}: zona no válida", str(error))
+            return False
+        self._mostrar_zona()
+        return True
+
+    def eliminar_zona(self) -> None:
+        """HU-02 CA-04: elimina la zona de este carril sin tocar las de los demás."""
+        if self.zona is None or not messagebox.askyesno(
+                "Eliminar zona", f"¿Eliminar la zona «{self.zona.nombre_carril}» del carril "
+                                 f"{self.posicion}?"):
+            return
+        try:
+            self._gestor_zonas.eliminar_zona(self.id_video)
+        except ErrorConfiguracion as error:
+            messagebox.showerror(f"Carril {self.posicion}", str(error))
+            return
+        self.zona = None
+        self._mostrar_zona()
+
+    def _mostrar_zona(self) -> None:
+        nombre = f" · {self.zona.nombre_carril}" if self.zona else ""
+        self._etiqueta_titulo.configure(text=f"Carril {self.posicion}{nombre}")
+        self.boton_zona.configure(text="Editar zona" if self.zona else "Trazar zona")
+        self.boton_zona.habilitar(self.video is not None)
+        self.boton_eliminar_zona.habilitar(self.zona is not None)
+        self._dibujar_video()
 
     def _dibujar_video(self) -> None:
         lienzo = self._lienzo_video
@@ -404,6 +604,10 @@ class TarjetaCarril(tk.Frame):
             ppm = vista_previa(self.video.primer_cuadro, x2 - x1, y2 - y1)
             self._imagen = tk.PhotoImage(master=self, data=ppm, format="ppm")
             lienzo.create_image((x1 + x2) / 2, (y1 + y2) / 2, image=self._imagen)
+            if self.zona is not None:
+                escala = (x2 - x1) / self.video.metadatos.ancho
+                lienzo.create_polygon(coordenadas_lienzo(self.zona.vertices, escala, x1, y1),
+                                      outline=COLOR_ZONA, fill="", width=GROSOR_ZONA)
             return
         lienzo.create_rectangle(x1, y1, x2, y2, fill=COLOR_VIDEO, outline=COLOR_SUPERFICIE)
         centro_x, centro_y = (x1 + x2) / 2, (y1 + y2) / 2
@@ -433,8 +637,9 @@ class TarjetaCarril(tk.Frame):
 class InterfazPrincipal(tk.Tk):
     """Ventana principal del operador (CU-01, CU-02, CU-03)."""
 
-    def __init__(self) -> None:
+    def __init__(self, gestor_zonas: GestorZonas | None = None) -> None:
         super().__init__()
+        self._gestor_zonas = gestor_zonas or crear_gestor_zonas()
         self.title("Semáforo inteligente · Cambyreta")
         self.geometry(TAMANO_VENTANA)
         self.minsize(*TAMANO_MINIMO)
@@ -519,7 +724,8 @@ class InterfazPrincipal(tk.Tk):
         self.tarjetas: dict[int, TarjetaCarril] = {}
         for i, posicion in enumerate(POSICIONES_CARRIL):
             vista.columnconfigure(i, weight=1, uniform="tarjeta")
-            tarjeta = TarjetaCarril(vista, posicion, self.escala, self._revisar_videos)
+            tarjeta = TarjetaCarril(vista, posicion, self.escala, self._gestor_zonas,
+                                    self._revisar_videos, self._nombres_otros_carriles)
             tarjeta.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 14, 0))
             tarjeta.mostrar_estado(EstadoSemaforo.ROJO)
             self.tarjetas[posicion] = tarjeta
@@ -621,7 +827,17 @@ class InterfazPrincipal(tk.Tk):
         self._boton_pausar.configure(text="▶  Reanudar" if self._pausado else "⏸  Pausar")
         self._boton_detener.habilitar(activa)
 
-    # --- Videos de los carriles ------------------------------------------------
+    def destroy(self) -> None:
+        """Cierra la base de datos junto con la ventana."""
+        self._gestor_zonas.cerrar()
+        super().destroy()
+
+    # --- Videos y zonas de los carriles ------------------------------------------
+    def _nombres_otros_carriles(self, posicion: int) -> list[str]:
+        """HU-02 CA-02: nombres ya usados por los otros carriles."""
+        return [t.zona.nombre_carril for p, t in self.tarjetas.items()
+                if p != posicion and t.zona is not None]
+
     def _revisar_videos(self) -> None:
         """HU-01 CA-05, CA-06: Iniciar se habilita solo con 3 videos de iguales fps."""
         cargados = {p: t.video.metadatos for p, t in self.tarjetas.items() if t.video is not None}
