@@ -1,9 +1,10 @@
 """Interfaz del operador (tkinter): barra lateral de módulos y panel de los 3 carriles.
 
-Esqueleto visual (adelanto del Sprint 0). Mientras no exista `GestorEjecucion`,
-los semáforos se alimentan con `SimuladorDemostracion`. Ambos publican los mismos
-mensajes de `modelos.py` en `InterfazPrincipal.cola`, así que conectar el motor
-real no requiere cambiar la interfaz.
+Esqueleto visual (adelanto del Sprint 0). Mientras no exista `GestorDemostracion`
+(HU-09), la demostración se alimenta con `SimuladorDemostracion`. Ambos publican los
+mismos mensajes de `modelos.py` en `InterfazPrincipal.cola`, así que conectar los
+planes reales no requiere cambiar la interfaz. El semáforo solo tiene sentido en la
+demostración: durante el análisis no hay plan (CLAUDE.md §6).
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import random
 import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
@@ -70,20 +72,27 @@ LUZ_APAGADA = {
 }
 ORDEN_LUCES = (EstadoSemaforo.ROJO, EstadoSemaforo.AMARILLO, EstadoSemaforo.VERDE)
 
-COLOR_EJECUCION = {
-    EstadoEjecucion.CREADA: COLOR_TEXTO_SUAVE,
-    EstadoEjecucion.EN_EJECUCION: LUZ_ENCENDIDA[EstadoSemaforo.VERDE],
-    EstadoEjecucion.PAUSADA: LUZ_ENCENDIDA[EstadoSemaforo.AMARILLO],
-    EstadoEjecucion.FINALIZADA: COLOR_ACENTO,
-    EstadoEjecucion.ABORTADA: LUZ_ENCENDIDA[EstadoSemaforo.ROJO],
+class EstadoReproduccion(Enum):
+    """RF-16 (HU-09 CA-03): estado de la reproducción, solo de la interfaz.
+
+    Pausar o detener la demostración no cambia `EstadoEjecucion` ni los registros.
+    """
+
+    SIN_INICIAR = "Sin reproducir"
+    REPRODUCIENDO = "Reproduciendo"
+    PAUSADA = "Pausada"
+    DETENIDA = "Detenida"
+    TERMINADA = "Terminada"
+
+
+COLOR_REPRODUCCION = {
+    EstadoReproduccion.SIN_INICIAR: COLOR_TEXTO_SUAVE,
+    EstadoReproduccion.REPRODUCIENDO: LUZ_ENCENDIDA[EstadoSemaforo.VERDE],
+    EstadoReproduccion.PAUSADA: LUZ_ENCENDIDA[EstadoSemaforo.AMARILLO],
+    EstadoReproduccion.DETENIDA: LUZ_ENCENDIDA[EstadoSemaforo.ROJO],
+    EstadoReproduccion.TERMINADA: COLOR_ACENTO,
 }
-ETIQUETA_EJECUCION = {
-    EstadoEjecucion.CREADA: "Sin ejecutar",
-    EstadoEjecucion.EN_EJECUCION: "En ejecución",
-    EstadoEjecucion.PAUSADA: "Pausada",
-    EstadoEjecucion.FINALIZADA: "Finalizada",
-    EstadoEjecucion.ABORTADA: "Detenida",
-}
+REPRODUCCION_ACTIVA = (EstadoReproduccion.REPRODUCIENDO, EstadoReproduccion.PAUSADA)
 ETIQUETA_CLASE = {Clase.AUTO: "Autos", Clase.MOTO: "Motos", Clase.CAMION: "Camiones"}
 
 DPI_BASE = 96
@@ -128,12 +137,17 @@ MODULOS = (
     Modulo("parametros", "Parámetros",
            "Sprint 1 · RF-10 — Umbral de demanda, umbral de confianza, intervalo "
            "de evaluación, verde mínimo, verde máximo y amarillo."),
-    Modulo("ejecucion", "Ejecución",
-           "Sprint 4 · CU-02, RF-16 — Procesamiento real de los tres videos: "
-           "iniciar, pausar y detener sin perder registros."),
+    Modulo("analisis", "Análisis",
+           "Sprint 2–3 · CU-02, HU-03, HU-04, HU-07 — Detección y conteo de los tres "
+           "videos (sin semáforo); se puede cancelar sin perder los conteos guardados. "
+           "Al terminar se generan los planes RECOMENDADO y FIJO (HU-05, HU-06)."),
+    Modulo("demostracion", "Demostración",
+           "Sprint 4 · CU-06, HU-09, RF-16, RF-17 — Reproducción del plan elegido: cada "
+           "video avanza en verde o amarillo y se detiene en rojo; comparación del "
+           "tiempo de verde sin demanda y la espera acumulada de ambos planes."),
     Modulo("resultados", "Resultados",
-           "Sprint 4 · HU-08, RF-12 — Conteos por intervalo y eventos de fase "
-           "de cada ejecución."),
+           "Sprint 1 · HU-08; Sprint 3 · RF-12; Cierre · RF-13 — Conteos por intervalo, "
+           "eventos de fase de cada plan y parámetros de cada ejecución."),
     Modulo("validacion", "Validación",
            "Cierre · RF-15 — Carga del conteo manual y cálculo de error y "
            "precisión por carril y clase."),
@@ -143,12 +157,12 @@ MODULOS = (
 
 
 def color_luz(luz: EstadoSemaforo, estado_actual: EstadoSemaforo) -> str:
-    """RF-09: solo la luz del estado vigente se ve encendida."""
+    """RF-16: solo la luz del estado vigente se ve encendida."""
     return LUZ_ENCENDIDA[luz] if luz is estado_actual else LUZ_APAGADA[luz]
 
 
 def formatear_tiempo(segundos: float) -> str:
-    """Segundos del video en formato mm:ss."""
+    """Segundos (del video o de simulación) en formato mm:ss."""
     minutos, resto = divmod(int(segundos), 60)
     return f"{minutos:02d}:{resto:02d}"
 
@@ -172,7 +186,8 @@ class SimuladorDemostracion:
     """Fuente provisional de mensajes para mostrar la interfaz sin el motor real.
 
     Rota el verde 1 → 2 → 3 con tiempos fijos y conteos aleatorios. NO aplica
-    RN-04..RN-08: lo reemplaza `GestorEjecucion` cuando existan HU-05 y HU-06.
+    RN-04..RN-08 ni RN-11: lo reemplaza `GestorDemostracion` (HU-09), que reproduce
+    los planes generados en HU-05 y HU-06.
     """
 
     def __init__(self, duracion: float = DEMO_DURACION_SEG, semilla: int = DEMO_SEMILLA) -> None:
@@ -183,7 +198,7 @@ class SimuladorDemostracion:
 
     @property
     def marca_tiempo(self) -> float:
-        """Segundos del video simulado."""
+        """Segundos de simulación."""
         return min(self._n_tick * DEMO_PASO_SEG, self._duracion)
 
     @property
@@ -199,7 +214,7 @@ class SimuladorDemostracion:
         return {p: estado_activo if p == activo else EstadoSemaforo.ROJO for p in POSICIONES_CARRIL}
 
     def avanzar(self) -> list[MensajeInterfaz]:
-        """Avanza un paso de video y devuelve los mensajes que publicaría el núcleo."""
+        """Avanza un paso de simulación y devuelve los mensajes que publicaría el núcleo."""
         self._n_tick += 1
         t = self.marca_tiempo
         mensajes: list[MensajeInterfaz] = []
@@ -254,7 +269,7 @@ class BotonPlano(tk.Button):
 
 
 class SemaforoVisual(tk.Canvas):
-    """RF-08, RF-09: semáforo de un carril con tres luces."""
+    """RF-08, RF-16: semáforo de un carril con tres luces (solo en la demostración)."""
 
     def __init__(self, padre: tk.Misc, escala: float) -> None:
         ancho, alto = round(ANCHO_SEMAFORO * escala), round(ALTO_SEMAFORO * escala)
@@ -621,21 +636,21 @@ class TarjetaCarril(tk.Frame):
                            font=(FUENTE, 9))
 
     def mostrar_estado(self, estado: EstadoSemaforo) -> None:
-        """RF-09 CA-03: refleja el estado del carril en el semáforo, la etiqueta y el borde."""
+        """HU-09 CA-02: refleja el estado del carril en el semáforo, la etiqueta y el borde."""
         color = LUZ_ENCENDIDA[estado]
         self.semaforo.mostrar_estado(estado)
         self._etiqueta_estado.configure(text=estado.value, fg=color)
         self.configure(highlightbackground=color if estado is EstadoSemaforo.VERDE else COLOR_TARJETA)
 
     def mostrar_conteo(self, actualizacion: ActualizacionCarril) -> None:
-        """RF-09 CA-02: conteo vigente por clase y demanda total del carril."""
+        """RF-09 (HU-07 CA-02), HU-09 CA-02: conteo vigente por clase y demanda total del carril."""
         for clase, nombre in ETIQUETA_CLASE.items():
             self._valores[nombre].configure(text=str(actualizacion.conteo.get(clase, 0)))
         self._valores["Demanda"].configure(text=str(actualizacion.demanda))
 
 
 class InterfazPrincipal(tk.Tk):
-    """Ventana principal del operador (CU-01, CU-02, CU-03)."""
+    """Ventana principal del operador (CU-01, CU-02, CU-03, CU-06)."""
 
     def __init__(self, gestor_zonas: GestorZonas | None = None) -> None:
         super().__init__()
@@ -648,13 +663,12 @@ class InterfazPrincipal(tk.Tk):
         self.cola: queue.Queue[MensajeInterfaz] = queue.Queue()
         self._simulador: SimuladorDemostracion | None = None
         self._duracion_comun: float | None = None
-        self._pausado = False
         self._tick_pendiente: str | None = None
         self._configurar_estilos()
         self._crear_barra_lateral()
         self._crear_contenido()
         self.mostrar_vista("panel")
-        self._mostrar_estado_ejecucion(EstadoEjecucion.CREADA)
+        self._mostrar_reproduccion(EstadoReproduccion.SIN_INICIAR)
         self.after(PERIODO_COLA_MS, self._procesar_cola)
 
     # --- Construcción ---------------------------------------------------------
@@ -702,8 +716,8 @@ class InterfazPrincipal(tk.Tk):
         self._titulo_vista = tk.Label(encabezado, font=(FUENTE, 18, "bold"), bg=COLOR_FONDO,
                                       fg=COLOR_TEXTO)
         self._titulo_vista.pack(side="left")
-        tk.Label(encabezado, text="Demostración con tiempos fijos · el motor de decisión "
-                                  "se conecta en HU-05 y HU-06",
+        tk.Label(encabezado, text="Demostración provisional con tiempos fijos · los planes "
+                                  "reales llegan con HU-05, HU-06 y HU-09",
                  font=(FUENTE, 9), bg=COLOR_FONDO, fg=COLOR_TEXTO_SUAVE).pack(side="left", padx=18)
         self._etiqueta_ejecucion = tk.Label(encabezado, font=(FUENTE, 9, "bold"),
                                             bg=COLOR_SUPERFICIE, padx=12, pady=4)
@@ -735,12 +749,12 @@ class InterfazPrincipal(tk.Tk):
 
     def _crear_barra_control(self, padre: tk.Frame) -> tk.Frame:
         barra = tk.Frame(padre, bg=COLOR_TARJETA, padx=16, pady=12)
-        self.boton_iniciar = BotonPlano(barra, "▶  Iniciar simulación", self._iniciar_demo,
+        self.boton_iniciar = BotonPlano(barra, "▶  Iniciar demostración", self._iniciar_demo,
                                         primario=True)
         self.boton_iniciar.pack(side="left")
-        self._boton_pausar = BotonPlano(barra, "⏸  Pausar", self._alternar_pausa)
+        self._boton_pausar = BotonPlano(barra, "⏸  Pausar", self.alternar_pausa)
         self._boton_pausar.pack(side="left", padx=(8, 0))
-        self._boton_detener = BotonPlano(barra, "■  Detener", self._detener_demo)
+        self._boton_detener = BotonPlano(barra, "■  Detener", self.detener_demo)
         self._boton_detener.pack(side="left", padx=(8, 0))
         self._etiqueta_tiempo = tk.Label(barra, text="00:00 / 00:00", font=(FUENTE, 11, "bold"),
                                          bg=COLOR_TARJETA, fg=COLOR_TEXTO)
@@ -748,7 +762,7 @@ class InterfazPrincipal(tk.Tk):
         self._progreso = ttk.Progressbar(barra, style="Semaforo.Horizontal.TProgressbar",
                                          length=round(200 * self.escala), maximum=1.0)
         self._progreso.pack(side="right", padx=(0, 14))
-        self._actualizar_botones(EstadoEjecucion.CREADA)
+        self._actualizar_botones(EstadoReproduccion.SIN_INICIAR)
         return barra
 
     def _crear_vista_pendiente(self, padre: tk.Frame, modulo: Modulo) -> tk.Frame:
@@ -803,7 +817,7 @@ class InterfazPrincipal(tk.Tk):
                 self._mostrar_progreso(mensaje)
 
     def mostrar_estados(self, estados: dict[int, EstadoSemaforo]) -> None:
-        """RF-09 CA-03: punto de conexión con el motor; muestra el estado de cada carril."""
+        """HU-09 CA-02: punto de conexión con el plan; muestra el estado de cada carril."""
         for posicion, estado in estados.items():
             self.tarjetas[posicion].mostrar_estado(estado)
 
@@ -811,20 +825,26 @@ class InterfazPrincipal(tk.Tk):
         self._etiqueta_tiempo.configure(
             text=f"{formatear_tiempo(progreso.marca_tiempo)} / {formatear_tiempo(progreso.duracion)}")
         self._progreso.configure(value=progreso.marca_tiempo / progreso.duracion)
-        if not self._pausado:
-            self._mostrar_estado_ejecucion(progreso.estado)
+        if progreso.estado is EstadoEjecucion.FINALIZADA:
+            self._mostrar_reproduccion(EstadoReproduccion.TERMINADA)
 
-    def _mostrar_estado_ejecucion(self, estado: EstadoEjecucion) -> None:
-        self._etiqueta_ejecucion.configure(text=f"●  {ETIQUETA_EJECUCION[estado]}",
-                                           fg=COLOR_EJECUCION[estado])
+    @property
+    def estado_reproduccion(self) -> EstadoReproduccion:
+        """RF-16: estado actual de la reproducción de la demostración."""
+        return self._estado_reproduccion
+
+    def _mostrar_reproduccion(self, estado: EstadoReproduccion) -> None:
+        self._etiqueta_ejecucion.configure(text=f"●  {estado.value}",
+                                           fg=COLOR_REPRODUCCION[estado])
         self._actualizar_botones(estado)
 
-    def _actualizar_botones(self, estado: EstadoEjecucion) -> None:
-        self._estado_ejecucion = estado
-        activa = estado in (EstadoEjecucion.EN_EJECUCION, EstadoEjecucion.PAUSADA)
+    def _actualizar_botones(self, estado: EstadoReproduccion) -> None:
+        self._estado_reproduccion = estado
+        activa = estado in REPRODUCCION_ACTIVA
         self.boton_iniciar.habilitar(not activa and self._duracion_comun is not None)
         self._boton_pausar.habilitar(activa)
-        self._boton_pausar.configure(text="▶  Reanudar" if self._pausado else "⏸  Pausar")
+        self._boton_pausar.configure(
+            text="▶  Reanudar" if estado is EstadoReproduccion.PAUSADA else "⏸  Pausar")
         self._boton_detener.habilitar(activa)
 
     def destroy(self) -> None:
@@ -850,19 +870,20 @@ class InterfazPrincipal(tk.Tk):
                 messagebox.showerror("Videos incompatibles", str(error))
         duracion = self._duracion_comun or 0
         self._etiqueta_tiempo.configure(text=f"00:00 / {formatear_tiempo(duracion)}")
-        self._actualizar_botones(self._estado_ejecucion)
+        self._actualizar_botones(self._estado_reproduccion)
 
-    # --- Demostración ---------------------------------------------------------
+    # --- Demostración (RF-16) -------------------------------------------------
     def _iniciar_demo(self) -> None:
         self._simulador = SimuladorDemostracion(duracion=self._duracion_comun)
-        self._pausado = False
+        self._mostrar_reproduccion(EstadoReproduccion.REPRODUCIENDO)
         self._programar_tick()
 
     def _programar_tick(self) -> None:
         self._tick_pendiente = self.after(DEMO_TICK_MS, self._tick_demo)
 
     def _tick_demo(self) -> None:
-        if self._simulador is None or self._pausado:
+        reproduciendo = self._estado_reproduccion is EstadoReproduccion.REPRODUCIENDO
+        if self._simulador is None or not reproduciendo:
             return
         for mensaje in self._simulador.avanzar():
             self.cola.put(mensaje)
@@ -874,20 +895,20 @@ class InterfazPrincipal(tk.Tk):
             self.after_cancel(self._tick_pendiente)
             self._tick_pendiente = None
 
-    def _alternar_pausa(self) -> None:
-        self._pausado = not self._pausado
-        estado = EstadoEjecucion.PAUSADA if self._pausado else EstadoEjecucion.EN_EJECUCION
-        self._mostrar_estado_ejecucion(estado)
-        if self._pausado:
+    def alternar_pausa(self) -> None:
+        """HU-09 CA-03: pausa o reanuda la reproducción sin tocar la ejecución ni la base."""
+        if self._estado_reproduccion is EstadoReproduccion.REPRODUCIENDO:
             self._cancelar_tick()
-        else:
+            self._mostrar_reproduccion(EstadoReproduccion.PAUSADA)
+        elif self._estado_reproduccion is EstadoReproduccion.PAUSADA:
+            self._mostrar_reproduccion(EstadoReproduccion.REPRODUCIENDO)
             self._programar_tick()
 
-    def _detener_demo(self) -> None:
+    def detener_demo(self) -> None:
+        """HU-09 CA-03: detiene la reproducción sin tocar la ejecución ni la base."""
         self._cancelar_tick()
         self._simulador = None
-        self._pausado = False
-        self._mostrar_estado_ejecucion(EstadoEjecucion.ABORTADA)
+        self._mostrar_reproduccion(EstadoReproduccion.DETENIDA)
 
 
 def _activar_dpi() -> None:

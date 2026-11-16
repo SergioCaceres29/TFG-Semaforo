@@ -10,7 +10,9 @@ paths:
 - Este es el ÚNICO módulo que importa `sqlite3`. Abrir con `PRAGMA foreign_keys = ON`.
 - El esquema es el de `docs/specs/diseno.md` sección 5. No agregar ni renombrar columnas sin aprobación.
 - `conteo` y `evento_fase`: solo `INSERT`. Nunca `UPDATE`, `DELETE`, `INSERT OR REPLACE` ni `UPSERT`. Los triggers lo bloquean; no desactivarlos.
-- Todo registro de resultados lleva `id_ejecucion`, `id_zona` y marca de tiempo en segundos del video (RN-09).
+- Todo registro de resultados lleva `id_ejecucion` e `id_zona` (RN-09). `conteo` y `conteo_manual` usan segundos del video; `evento_fase` lleva además `tipo_plan` (RECOMENDADO/FIJO) y `marca_tiempo` en **segundos de simulación**.
+- Cambios pendientes del Word (nov/2026): `evento_fase.tipo_plan` y `ejecucion.estado` sin `Pausada`. Aplicarlos en `esquema.sql` solo al empezar la HU que los usa (HU-08 / RF-12), avisando; recrear la base de desarrollo.
+- La demostración solo **lee** (`consultar_plan`, `consultar_conteos`); nunca escribe.
 - Consultas siempre parametrizadas (`?`), nunca armadas con f-strings.
 - `commit` al cierre de cada intervalo para no perder datos ante una interrupción (HU-08 CA-04).
 - CSV (RF-14): módulo `csv` estándar, `encoding="utf-8-sig"`, `newline=""`, separador `;` si se abrirá en Excel en español (confirmar).
