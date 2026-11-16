@@ -24,11 +24,13 @@ from semaforo.modelos import (
     ActualizacionCarril,
     CambioFase,
     Clase,
+    ErrorVideo,
     EstadoEjecucion,
     EstadoSemaforo,
     MensajeInterfaz,
     ProgresoEjecucion,
 )
+from semaforo.nucleo import VideoCargado, cargar_video, validar_videos_carriles, vista_previa
 
 registro = logging.getLogger(__name__)
 
@@ -273,15 +275,20 @@ class SemaforoVisual(tk.Canvas):
 class TarjetaCarril(tk.Frame):
     """Tarjeta de un carril: video, semáforo, conteo por clase y acciones."""
 
-    def __init__(self, padre: tk.Misc, posicion: int, escala: float) -> None:
+    def __init__(self, padre: tk.Misc, posicion: int, escala: float,
+                 al_cambiar_video: Callable[[], None]) -> None:
         super().__init__(padre, bg=COLOR_TARJETA, highlightthickness=2,
                          highlightbackground=COLOR_TARJETA, padx=14, pady=12)
         self.posicion = posicion
         self.ruta_video: Path | None = None
+        self.video: VideoCargado | None = None
+        self._al_cambiar_video = al_cambiar_video
+        self._imagen: tk.PhotoImage | None = None
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
         self._crear_encabezado()
         self._crear_cuerpo(escala)
+        self._crear_datos_archivo()
         self._crear_conteos()
         self._crear_acciones()
 
@@ -306,9 +313,20 @@ class TarjetaCarril(tk.Frame):
         self.semaforo = SemaforoVisual(cuerpo, escala)
         self.semaforo.grid(row=0, column=1)
 
+    def _crear_datos_archivo(self) -> None:
+        fila = tk.Frame(self, bg=COLOR_TARJETA)
+        fila.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        self._etiqueta_ruta = tk.Label(fila, text="Ningún archivo seleccionado", font=(FUENTE, 8),
+                                       bg=COLOR_TARJETA, fg=COLOR_TEXTO_SUAVE, anchor="w")
+        self._etiqueta_ruta.pack(fill="x")
+        self._etiqueta_metadatos = tk.Label(fila, text="", font=(FUENTE, 8, "bold"),
+                                            bg=COLOR_TARJETA, fg=COLOR_TEXTO, anchor="w")
+        self._etiqueta_metadatos.pack(fill="x")
+        fila.bind("<Configure>", lambda e: self._etiqueta_ruta.configure(wraplength=e.width))
+
     def _crear_conteos(self) -> None:
         fila = tk.Frame(self, bg=COLOR_TARJETA)
-        fila.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        fila.grid(row=3, column=0, sticky="ew", pady=(12, 0))
         self._valores: dict[str, tk.Label] = {}
         etiquetas = [*ETIQUETA_CLASE.values(), "Demanda"]
         for i, nombre in enumerate(etiquetas):
@@ -324,37 +342,75 @@ class TarjetaCarril(tk.Frame):
 
     def _crear_acciones(self) -> None:
         fila = tk.Frame(self, bg=COLOR_TARJETA)
-        fila.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-        BotonPlano(fila, "Cargar mp4", self._seleccionar_video).pack(side="left")
+        fila.grid(row=4, column=0, sticky="ew", pady=(12, 0))
+        BotonPlano(fila, "Elegir mp4", self._abrir_dialogo).pack(side="left")
+        self.boton_cargar = BotonPlano(fila, "Cargar", self.cargar_video, primario=True)
+        self.boton_cargar.habilitar(False)
+        self.boton_cargar.pack(side="left", padx=(8, 0))
         zona = BotonPlano(fila, "Trazar zona", lambda: None)
         zona.habilitar(False)
         zona.pack(side="left", padx=(8, 0))
 
-    def _seleccionar_video(self) -> None:
-        """HU-01 (parcial): elegir el mp4 del carril; la apertura se valida en HU-01."""
+    @property
+    def texto_ruta(self) -> str:
+        return self._etiqueta_ruta.cget("text")
+
+    @property
+    def texto_metadatos(self) -> str:
+        return self._etiqueta_metadatos.cget("text")
+
+    def _abrir_dialogo(self) -> None:
         seleccion = filedialog.askopenfilename(
             title=f"Video del carril {self.posicion}", filetypes=[("Video MP4", "*.mp4")],
         )
-        if not seleccion:
-            return
-        ruta = Path(seleccion)
-        if ruta.suffix.lower() != ".mp4":
-            messagebox.showerror("Video no admitido", f"«{ruta.name}» no es un archivo mp4 (RN-01).")
-            return
+        if seleccion:
+            self.seleccionar_archivo(Path(seleccion))
+
+    def seleccionar_archivo(self, ruta: Path) -> None:
+        """HU-01 CA-01: muestra la ruta elegida y habilita la carga."""
         self.ruta_video = ruta
-        registro.info("Carril %d: video seleccionado %s", self.posicion, ruta)
+        self._etiqueta_ruta.configure(text=str(ruta))
+        self.boton_cargar.habilitar(True)
+        self._descartar_video()
+
+    def cargar_video(self) -> None:
+        """HU-01 CA-02..CA-04 / RNF-05: carga el mp4; si falla, avisa y la tarjeta sigue operativa."""
+        if self.ruta_video is None:
+            return
+        try:
+            self.video = cargar_video(self.ruta_video)
+        except ErrorVideo as error:
+            registro.warning("Carril %d: %s", self.posicion, error)
+            messagebox.showerror(f"Carril {self.posicion}: video no admitido", str(error))
+            return
+        metadatos = self.video.metadatos
+        self._etiqueta_metadatos.configure(
+            text=f"{metadatos.resolucion} · {metadatos.fps:.2f} fps · "
+                 f"{formatear_tiempo(metadatos.duracion)}")
         self._dibujar_video()
+        self._al_cambiar_video()
+
+    def _descartar_video(self) -> None:
+        self.video = None
+        self._etiqueta_metadatos.configure(text="")
+        self._dibujar_video()
+        self._al_cambiar_video()
 
     def _dibujar_video(self) -> None:
         lienzo = self._lienzo_video
         lienzo.delete("all")
         x1, y1, x2, y2 = rectangulo_video(lienzo.winfo_width(), lienzo.winfo_height())
+        if self.video is not None and x2 - x1 > 1 and y2 - y1 > 1:
+            ppm = vista_previa(self.video.primer_cuadro, x2 - x1, y2 - y1)
+            self._imagen = tk.PhotoImage(master=self, data=ppm, format="ppm")
+            lienzo.create_image((x1 + x2) / 2, (y1 + y2) / 2, image=self._imagen)
+            return
         lienzo.create_rectangle(x1, y1, x2, y2, fill=COLOR_VIDEO, outline=COLOR_SUPERFICIE)
         centro_x, centro_y = (x1 + x2) / 2, (y1 + y2) / 2
         if self.ruta_video is None:
-            titulo, detalle = "Sin video", "Cargá el mp4 de este carril"
+            titulo, detalle = "Sin video", "Elegí el mp4 de este carril"
         else:
-            titulo, detalle = self.ruta_video.name, "Vista previa disponible con HU-01"
+            titulo, detalle = self.ruta_video.name, "Presioná «Cargar» para ver el primer cuadro"
         lienzo.create_text(centro_x, centro_y - 10, text=titulo, fill=COLOR_TEXTO,
                            font=(FUENTE, 11, "bold"), width=max(x2 - x1 - 20, 1))
         lienzo.create_text(centro_x, centro_y + 14, text=detalle, fill=COLOR_TEXTO_SUAVE,
@@ -386,6 +442,7 @@ class InterfazPrincipal(tk.Tk):
         self.escala = self.winfo_fpixels("1i") / DPI_BASE
         self.cola: queue.Queue[MensajeInterfaz] = queue.Queue()
         self._simulador: SimuladorDemostracion | None = None
+        self._duracion_comun: float | None = None
         self._pausado = False
         self._tick_pendiente: str | None = None
         self._configurar_estilos()
@@ -462,7 +519,7 @@ class InterfazPrincipal(tk.Tk):
         self.tarjetas: dict[int, TarjetaCarril] = {}
         for i, posicion in enumerate(POSICIONES_CARRIL):
             vista.columnconfigure(i, weight=1, uniform="tarjeta")
-            tarjeta = TarjetaCarril(vista, posicion, self.escala)
+            tarjeta = TarjetaCarril(vista, posicion, self.escala, self._revisar_videos)
             tarjeta.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 14, 0))
             tarjeta.mostrar_estado(EstadoSemaforo.ROJO)
             self.tarjetas[posicion] = tarjeta
@@ -472,9 +529,9 @@ class InterfazPrincipal(tk.Tk):
 
     def _crear_barra_control(self, padre: tk.Frame) -> tk.Frame:
         barra = tk.Frame(padre, bg=COLOR_TARJETA, padx=16, pady=12)
-        self._boton_iniciar = BotonPlano(barra, "▶  Iniciar simulación", self._iniciar_demo,
-                                         primario=True)
-        self._boton_iniciar.pack(side="left")
+        self.boton_iniciar = BotonPlano(barra, "▶  Iniciar simulación", self._iniciar_demo,
+                                        primario=True)
+        self.boton_iniciar.pack(side="left")
         self._boton_pausar = BotonPlano(barra, "⏸  Pausar", self._alternar_pausa)
         self._boton_pausar.pack(side="left", padx=(8, 0))
         self._boton_detener = BotonPlano(barra, "■  Detener", self._detener_demo)
@@ -557,15 +614,31 @@ class InterfazPrincipal(tk.Tk):
         self._actualizar_botones(estado)
 
     def _actualizar_botones(self, estado: EstadoEjecucion) -> None:
+        self._estado_ejecucion = estado
         activa = estado in (EstadoEjecucion.EN_EJECUCION, EstadoEjecucion.PAUSADA)
-        self._boton_iniciar.habilitar(not activa)
+        self.boton_iniciar.habilitar(not activa and self._duracion_comun is not None)
         self._boton_pausar.habilitar(activa)
         self._boton_pausar.configure(text="▶  Reanudar" if self._pausado else "⏸  Pausar")
         self._boton_detener.habilitar(activa)
 
+    # --- Videos de los carriles ------------------------------------------------
+    def _revisar_videos(self) -> None:
+        """HU-01 CA-05, CA-06: Iniciar se habilita solo con 3 videos de iguales fps."""
+        cargados = {p: t.video.metadatos for p, t in self.tarjetas.items() if t.video is not None}
+        self._duracion_comun = None
+        if len(cargados) == NUM_CARRILES:
+            try:
+                self._duracion_comun = validar_videos_carriles(cargados)
+            except ErrorVideo as error:
+                registro.warning("%s", error)
+                messagebox.showerror("Videos incompatibles", str(error))
+        duracion = self._duracion_comun or 0
+        self._etiqueta_tiempo.configure(text=f"00:00 / {formatear_tiempo(duracion)}")
+        self._actualizar_botones(self._estado_ejecucion)
+
     # --- Demostración ---------------------------------------------------------
     def _iniciar_demo(self) -> None:
-        self._simulador = SimuladorDemostracion()
+        self._simulador = SimuladorDemostracion(duracion=self._duracion_comun)
         self._pausado = False
         self._programar_tick()
 

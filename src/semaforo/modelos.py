@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, IntEnum
+from pathlib import Path
 
 NUM_CARRILES = 3
 POSICIONES_CARRIL: tuple[int, ...] = tuple(range(1, NUM_CARRILES + 1))
@@ -46,6 +47,27 @@ class ErrorVideo(Exception):
 
 class ErrorConfiguracion(Exception):
     """RF-02, RF-10: zona o parámetro inválido."""
+
+
+@dataclass(frozen=True)
+class MetadatosVideo:
+    """RF-01 (HU-01 CA-03): datos de un video cargado, los mismos de la tabla video."""
+
+    ruta: Path
+    fps: float
+    total_cuadros: int
+    ancho: int
+    alto: int
+
+    @property
+    def duracion(self) -> float:
+        """Segundos del video (total_cuadros / fps)."""
+        return self.total_cuadros / self.fps
+
+    @property
+    def resolucion(self) -> str:
+        """Resolución con el formato de video.resolucion, ej. '1920x1080'."""
+        return f"{self.ancho}x{self.alto}"
 
 
 @dataclass(frozen=True)
