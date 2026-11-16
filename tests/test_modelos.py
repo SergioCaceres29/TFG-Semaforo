@@ -7,9 +7,13 @@ from semaforo.modelos import POSICIONES_CARRIL, ActualizacionCarril, Clase, Esta
 
 class TestModelos(unittest.TestCase):
     def test_mapeo_clases_coincide_con_indices_del_modelo(self):
-        """RN-02 / CLAUDE.md §6: índice 0 = auto, 1 = moto, 2 = camión."""
-        self.assertEqual([(c.value, c.descripcion) for c in Clase],
-                         [(0, "auto"), (1, "moto"), (2, "camion")])
+        """RN-02 / CLAUDE.md §6: índice 0 = auto, 1 = camión, 2 = moto (orden de best.pt)."""
+        self.assertEqual({c.value: c.descripcion for c in Clase},
+                         {0: "auto", 1: "camion", 2: "moto"})
+
+    def test_orden_de_presentacion_auto_moto_camion(self):
+        """La interfaz muestra las clases como auto, moto, camión, sin importar el índice."""
+        self.assertEqual([c.descripcion for c in Clase], ["auto", "moto", "camion"])
 
     def test_tres_carriles_en_posiciones_1_a_3(self):
         """RN-01: un video por carril, 3 carriles."""
