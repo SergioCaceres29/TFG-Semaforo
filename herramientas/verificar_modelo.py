@@ -3,7 +3,7 @@
 Herramienta de puesta a punto, fuera del paquete `semaforo`. Comprueba:
 - versiones de Python, PyTorch y OpenCV, y disponibilidad de CUDA;
 - que `modelos/best.pt` exista y cargue;
-- que el mapeo de clases sea 0 = auto, 1 = moto, 2 = camion (RN-02, CLAUDE.md §6).
+- que el mapeo de clases sea 0 = auto, 1 = camion, 2 = moto (RN-02, CLAUDE.md §6).
 """
 
 import logging
@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 RUTA_MODELO = Path(__file__).resolve().parent.parent / "modelos" / "best.pt"
-CLASES_ESPERADAS = {0: "auto", 1: "moto", 2: "camion"}
+CLASES_ESPERADAS = {0: "auto", 1: "camion", 2: "moto"}
 
 logger = logging.getLogger(__name__)
 

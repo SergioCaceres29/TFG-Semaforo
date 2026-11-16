@@ -11,11 +11,15 @@ POSICIONES_CARRIL: tuple[int, ...] = tuple(range(1, NUM_CARRILES + 1))
 
 
 class Clase(IntEnum):
-    """RN-02: únicas clases admitidas. El valor es el índice del modelo (dataset/data.yaml)."""
+    """RN-02: únicas clases admitidas. El valor es el índice del modelo (dataset/data.yaml).
+
+    Roboflow exporta las clases en orden alfabético (auto, camion, moto); el orden de
+    definición se mantiene auto, moto, camión para la presentación.
+    """
 
     AUTO = 0
-    MOTO = 1
-    CAMION = 2
+    MOTO = 2
+    CAMION = 1
 
     @property
     def descripcion(self) -> str:
