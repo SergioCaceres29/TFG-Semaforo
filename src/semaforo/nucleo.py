@@ -1,7 +1,7 @@
 """Núcleo (CU-02): único módulo que coordina a los demás.
 
-Por ahora cubre la carga y validación de los tres videos (HU-01) y la definición y
-persistencia de sus zonas (HU-02). `GestorEjecucion` y el bucle de cuadros se
+Por ahora cubre la carga y validación de los tres videos (HU-01), la definición y
+persistencia de sus zonas (HU-02) y la configuración de parámetros (RF-10). `GestorEjecucion` y el bucle de cuadros se
 agregan en la integración (Sprint 4).
 """
 
@@ -16,8 +16,16 @@ from pathlib import Path
 import numpy as np
 
 from semaforo.captura import LectorVideo
-from semaforo.configuracion import validar_zona
-from semaforo.modelos import NUM_CARRILES, POSICIONES_CARRIL, ErrorVideo, MetadatosVideo, Zona
+from semaforo import configuracion
+from semaforo.configuracion import leer_parametros, validar_zona
+from semaforo.modelos import (
+    NUM_CARRILES,
+    POSICIONES_CARRIL,
+    ErrorVideo,
+    MetadatosVideo,
+    Parametros,
+    Zona,
+)
 from semaforo.persistencia import RepositorioSQLite
 from semaforo.visualizacion import Visualizador
 
@@ -75,6 +83,19 @@ def validar_videos_carriles(metadatos: Mapping[int, MetadatosVideo]) -> float:
         registro.info("Duraciones distintas: se procesará hasta %.1f s (el video más corto).",
                       duracion)
     return duracion
+
+
+ETIQUETAS_PARAMETROS = configuracion.ETIQUETAS_PARAMETROS
+"""RF-10: etiquetas del formulario (la interfaz no importa configuracion.py)."""
+PARAMETROS_INICIALES = configuracion.PARAMETROS_INICIALES
+"""RF-10: valores con los que arranca el formulario."""
+
+
+def configurar_parametros(textos: Mapping[str, str]) -> Parametros:
+    """RF-10: valida los parámetros del formulario antes de ejecutar (ErrorConfiguracion si no)."""
+    parametros = leer_parametros(textos)
+    registro.info("Parámetros configurados: %s", parametros)
+    return parametros
 
 
 class GestorZonas:
