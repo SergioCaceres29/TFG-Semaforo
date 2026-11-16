@@ -1,7 +1,7 @@
 """Persistencia (HU-08, RF-03, RF-11..14): único módulo con acceso a SQLite.
 
-Por ahora cubre videos y zonas virtuales (HU-02). `conteo` y `evento_fase` son de
-solo inserción (RNF-09); los triggers del esquema lo garantizan.
+Cubre videos y zonas virtuales (HU-02), ejecuciones y conteos (HU-08). `conteo` y
+`evento_fase` son de solo inserción (RNF-09); los triggers del esquema lo garantizan.
 """
 
 from __future__ import annotations
@@ -9,9 +9,21 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+from collections.abc import Mapping
+from dataclasses import astuple
+from datetime import datetime
 from pathlib import Path
 
-from semaforo.modelos import ErrorConfiguracion, MetadatosVideo, Zona
+from semaforo.modelos import (
+    POSICIONES_CARRIL,
+    Clase,
+    ErrorConfiguracion,
+    EstadoEjecucion,
+    MetadatosVideo,
+    Parametros,
+    RegistroConteo,
+    Zona,
+)
 
 registro = logging.getLogger(__name__)
 
@@ -75,6 +87,67 @@ class RepositorioSQLite:
         except sqlite3.IntegrityError as error:
             raise ErrorConfiguracion("La zona tiene conteos registrados y no se puede eliminar; "
                                      "podés modificar sus vértices.") from error
+
+    def insertar_ejecucion(self, parametros: Parametros, videos: Mapping[int, int],
+                           version_modelo: str) -> int:
+        """RF-13, RN-09: crea la ejecución (estado Creada) con sus parámetros y sus 3 videos.
+
+        `videos` asocia cada posición de carril (1, 2, 3) con el id del video.
+        """
+        if set(videos) != set(POSICIONES_CARRIL):
+            raise ErrorConfiguracion("Una ejecución necesita un video en cada uno de los tres "
+                                     "carriles.")
+        fecha_hora = datetime.now().isoformat(timespec="seconds")  # solo registro, no lógica
+        with self._conexion:
+            cursor = self._conexion.execute(
+                "INSERT INTO ejecucion (fecha_hora, version_modelo, umbral_demanda,"
+                " umbral_confianza, intervalo_seg, verde_min, verde_max, amarillo, estado)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (fecha_hora, version_modelo, *astuple(parametros), EstadoEjecucion.CREADA.value))
+            id_ejecucion = cursor.lastrowid
+            self._conexion.executemany(
+                "INSERT INTO ejecucion_video (id_ejecucion, id_video, posicion) VALUES (?, ?, ?)",
+                [(id_ejecucion, videos[p], p) for p in POSICIONES_CARRIL])
+        registro.info("Ejecución %d creada", id_ejecucion)
+        return id_ejecucion
+
+    def actualizar_estado_ejecucion(self, id_ejecucion: int, estado: EstadoEjecucion) -> None:
+        """Figura 10: cambia el estado de la ejecución (la única tabla de resultados que se actualiza)."""
+        with self._conexion:
+            self._conexion.execute("UPDATE ejecucion SET estado = ? WHERE id_ejecucion = ?",
+                                   (estado.value, id_ejecucion))
+
+    def estado_ejecucion(self, id_ejecucion: int) -> EstadoEjecucion:
+        """Figura 10: estado guardado de la ejecución."""
+        fila = self._conexion.execute("SELECT estado FROM ejecucion WHERE id_ejecucion = ?",
+                                      (id_ejecucion,)).fetchone()
+        return EstadoEjecucion(fila[0])
+
+    def insertar_conteo(self, id_ejecucion: int, id_zona: int, conteo: Mapping[Clase, int],
+                        intervalo_inicio: float, intervalo_fin: float) -> None:
+        """HU-08 CA-01, CA-04 / RF-11: una fila por clase al cierre del intervalo.
+
+        Las clases ausentes se guardan con 0. Las tres filas se confirman juntas: ante
+        un corte, el intervalo queda completo o no queda.
+        """
+        filas = [(id_ejecucion, id_zona, clase.descripcion, conteo.get(clase, 0),
+                  intervalo_inicio, intervalo_fin) for clase in Clase]
+        with self._conexion:
+            self._conexion.executemany(
+                "INSERT INTO conteo (id_ejecucion, id_zona, id_clase, cantidad, intervalo_inicio,"
+                " intervalo_fin) VALUES (?, ?,"
+                " (SELECT id_clase FROM clase_vehiculo WHERE descripcion = ?), ?, ?, ?)",
+                filas)
+
+    def consultar_conteos(self, id_ejecucion: int) -> list[RegistroConteo]:
+        """RF-11, CU-03: conteos de una ejecución, ordenados por intervalo, zona y clase."""
+        filas = self._conexion.execute(
+            "SELECT c.id_zona, cv.descripcion, c.cantidad, c.intervalo_inicio, c.intervalo_fin"
+            " FROM conteo c JOIN clase_vehiculo cv ON cv.id_clase = c.id_clase"
+            " WHERE c.id_ejecucion = ?"
+            " ORDER BY c.intervalo_inicio, c.id_zona, c.id_clase", (id_ejecucion,)).fetchall()
+        return [RegistroConteo(id_zona, Clase[descripcion.upper()], cantidad, inicio, fin)
+                for id_zona, descripcion, cantidad, inicio, fin in filas]
 
     def cerrar(self) -> None:
         """Cierra la conexión con la base."""
