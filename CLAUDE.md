@@ -138,7 +138,7 @@ Reglas de dependencia (§4.1 del TFG):
 | Sprint | Fechas | Alcance | Estado |
 |---|---|---|---|
 | 0 | 19/10–29/10 | Entorno, dataset, entrenamiento en Colab, `best.pt` · adelanto: esqueleto visual de la interfaz (semáforos simulados) | en curso |
-| 1 | 30/10–09/11 | HU-01, HU-02, **HU-08**, RF-10 (+ conteo manual de referencia, tarea QA) | en curso · HU-01 aprobada · HU-02 en revisión (CP-02, CP-03 OK) · RF-10 en revisión (CP-10 OK) · HU-08 en revisión (CP-11, CP-25 OK) · falta tu aprobación de HU-02, RF-10 y HU-08, y el conteo manual de referencia (QA) |
+| 1 | 30/10–09/11 | HU-01, HU-02, **HU-08**, RF-10 (+ conteo manual de referencia, tarea QA) | en curso · HU-01, HU-02, RF-10 y HU-08 aprobadas (15/11; CP-01, 02, 03, 10, 11, 21, 25 OK) · PR a `develop`, uno por rama · falta el conteo manual de referencia (QA) |
 | 2 | 10/11–20/11 | HU-03, HU-04 (sprint sin holgura) | pendiente |
 | 3 | 21/11–01/12 | HU-05, HU-06, RF-12 (generación de ambos planes) | pendiente |
 | 4 | 02/12–10/12 | HU-07, **HU-09** (demostración y comparación, RF-16, RF-17), integración (80 %: 14 de 17 RF) | pendiente |
