@@ -1,0 +1,15 @@
+names:
+- auto
+- camion
+- moto
+nc: 3
+path: /content/drive/MyDrive/Entrenamiento_IA/dataset2
+roboflow:
+  license: Private
+  project: proyecto-tfg
+  url: https://app.roboflow.com/sergios-workspace-m4b2j/proyecto-tfg/3
+  version: 3
+  workspace: sergios-workspace-m4b2j
+test: test/images
+train: train/images
+val: valid/images

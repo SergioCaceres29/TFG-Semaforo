@@ -105,7 +105,7 @@ Reglas de dependencia (§4.1 del TFG):
 - Activar entorno: `.\.venv\Scripts\Activate.ps1`
 - Ejecutar app: `python -m semaforo`
 - Pruebas: `python -m unittest discover -s tests -v`
-- Estilo: `ruff check src tests` (pendiente instalar/configurar en `pyproject.toml`; pedir antes)
+- Estilo: `ruff check src tests` (configurado en `pyproject.toml`: E, F, W, líneas ≤ 120; instalar con `pip install -e ".[dev]"`)
 - Verificar modelo: `python herramientas/verificar_modelo.py`
 - Ramas Git: `main` (estable) · `develop` (integración) · `feature/HU-0X-nombre` o `feature/RF-XX-nombre` · `hotfix/*`. SemVer: `v0.1.0` (Sprint 1) … `v0.4.0` (Sprint 4), `v1.0.0` entrega final.
 - Commits: `HU-04: conteo por ocupación al cierre del intervalo (RF-06, RN-03)`.
@@ -139,7 +139,7 @@ Reglas de dependencia (§4.1 del TFG):
 |---|---|---|---|
 | 0 | 19/10–29/10 | Entorno, dataset, entrenamiento en Colab, `best.pt` · adelanto: esqueleto visual de la interfaz (semáforos simulados) | en curso |
 | 1 | 30/10–09/11 | HU-01, HU-02, **HU-08**, RF-10 (+ conteo manual de referencia, tarea QA) | en curso · HU-01, HU-02, RF-10 y HU-08 aprobadas (15/11; CP-01, 02, 03, 10, 11, 21, 25 OK) · PR a `develop`, uno por rama · falta el conteo manual de referencia (QA) |
-| 2 | 10/11–20/11 | HU-03, HU-04 (sprint sin holgura) | pendiente |
+| 2 | 10/11–20/11 | HU-03, HU-04 (sprint sin holgura) | en curso · HU-03 implementada (17/11; CP-04, CP-05 OK; CP-17 manual en Colab, CP-20 en la integración), pendiente de aprobación · HU-04 pendiente |
 | 3 | 21/11–01/12 | HU-05, HU-06, RF-12 (generación de ambos planes) | pendiente |
 | 4 | 02/12–10/12 | HU-07, **HU-09** (demostración y comparación, RF-16, RF-17), integración (80 %: 14 de 17 RF) | pendiente |
 | Cierre | > 10/12 | RF-13, RF-14, RF-15, Etapa 4 (≥ 80 % de CP aprobados) | pendiente |

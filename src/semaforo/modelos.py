@@ -102,6 +102,18 @@ class RegistroConteo:
     intervalo_fin: float
 
 
+@dataclass(frozen=True)
+class Deteccion:
+    """RF-04, RF-05: vehículo detectado en un cuadro, con su caja en píxeles de ese cuadro."""
+
+    clase: Clase
+    confianza: float
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+
+
 Vertice = tuple[int, int]
 
 
