@@ -117,7 +117,8 @@ Reglas de dependencia (§4.1 del TFG):
 - **Tres carriles, un video por carril**: siempre son 3 carriles y cada uno se graba por separado. Los tres videos comparten un único `MotorDecision` y un único `ControladorSemaforo`.
 - **Sincronización del análisis**: los tres videos se grabaron en el mismo lapso, con iguales fps; el cuadro `n` de cada video corresponde al mismo instante `t = n / fps`. Si los fps no coinciden → `ErrorVideo` con mensaje controlado. Si la duración difiere, se procesa **hasta el final del más corto**.
 - **Zonas por video**: una sola zona virtual por video, la del carril que filma.
-- **Pertenencia a zona** (A CONFIRMAR): punto de referencia = centro inferior de la caja `((x1+x2)/2, y2)`; `cv2.pointPolygonTest >= 0`. Las detecciones de un video solo se evalúan contra la zona de ese video.
+- **Pertenencia a zona** (confirmado en HU-04, 17/11/2026): punto de referencia = centro inferior de la caja `((x1+x2)/2, y2)`; `cv2.pointPolygonTest >= 0` (el borde cuenta como dentro). Las detecciones de un video solo se evalúan contra la zona de ese video.
+- **Cuadro de cierre** (confirmado en HU-04): el intervalo `[k·I, (k+1)·I)` cierra en el **primer cuadro con `t ≥ (k+1)·I`**; los límites se calculan con `k` entero. El **último intervalo incompleto se descarta** (no se registra).
 - **Análisis sin semáforo**: el bucle de cuadros solo detecta, cuenta, guarda y muestra. El motor **no** corre dentro del bucle.
 - **Generación de planes** (HU-05, HU-06): al terminar el análisis (estado aún EnEjecucion), se generan **ambos** planes con duración = tramo analizado, y recién entonces la ejecución pasa a Finalizada. Se generan completos y luego se insertan en `evento_fase` con su `tipo_plan` (así cada evento ya conoce su `duracion`).
 - **RN-11 en la generación**: cada carril lleva su `t_video[p]`, que avanza solo en verde/amarillo; la demanda de un carril en rojo es la ocupación registrada en el instante en que su video quedó detenido. Aplica a los dos planes. Regla exacta para leer la ocupación en `t_video` y reloj de evaluación: **A CONFIRMAR** (ver `diseno.md` §4.1).
@@ -139,7 +140,7 @@ Reglas de dependencia (§4.1 del TFG):
 |---|---|---|---|
 | 0 | 19/10–29/10 | Entorno, dataset, entrenamiento en Colab, `best.pt` · adelanto: esqueleto visual de la interfaz (semáforos simulados) | en curso |
 | 1 | 30/10–09/11 | HU-01, HU-02, **HU-08**, RF-10 (+ conteo manual de referencia, tarea QA) | en curso · HU-01, HU-02, RF-10 y HU-08 aprobadas (15/11; CP-01, 02, 03, 10, 11, 21, 25 OK) · PR a `develop`, uno por rama · falta el conteo manual de referencia (QA) |
-| 2 | 10/11–20/11 | HU-03, HU-04 (sprint sin holgura) | en curso · HU-03 implementada (17/11; CP-04, CP-05 OK; CP-17 manual en Colab, CP-20 en la integración), pendiente de aprobación · HU-04 pendiente |
+| 2 | 10/11–20/11 | HU-03, HU-04 (sprint sin holgura) | en curso · HU-03 aprobada (17/11; CP-04, CP-05 OK; CP-17 manual en Colab, CP-20 en la integración) · HU-04 implementada (17/11; CP-06 OK; CP-18 manual al cierre con RF-15), pendiente de aprobación |
 | 3 | 21/11–01/12 | HU-05, HU-06, RF-12 (generación de ambos planes) | pendiente |
 | 4 | 02/12–10/12 | HU-07, **HU-09** (demostración y comparación, RF-16, RF-17), integración (80 %: 14 de 17 RF) | pendiente |
 | Cierre | > 10/12 | RF-13, RF-14, RF-15, Etapa 4 (≥ 80 % de CP aprobados) | pendiente |
