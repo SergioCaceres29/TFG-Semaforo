@@ -59,7 +59,7 @@ duracion = duración del tramo analizado (s)
 para tipo_plan en (RECOMENDADO, FIJO):
     t_sim = 0; t_video[p] = 0 para p = 1, 2, 3                # cada carril tiene su propio tiempo de video
     mientras t_sim < duracion:                                # HU-06 CA-05
-        demanda[p] = ocupación registrada en t_video[p]       # RN-11 (regla exacta A CONFIRMAR, ver §4.1)
+        demanda[p] = demanda del último intervalo cerrado en t_video[p]   # RN-11 (§4.1, regla 1)
         si t_sim cierra un intervalo de evaluación:
             RECOMENDADO → motor.evaluar(demanda, estados)  └─ controlador.solicitar_transicion(carril)
             FIJO        → turno del ciclo 1 → 2 → 3 con verde_max + amarillo (RN-08)
@@ -115,6 +115,7 @@ recibir la demanda de cada carril en el instante de su video (RN-11)
 si algún carril supera el umbral (>):
     elegir el de mayor demanda
     si hay empate: elegir el de mayor tiempo acumulado en rojo        # RN-07
+    si también empatan en rojo: la menor posición                      # §4.1, regla 7
 sino:
     elegir el siguiente carril del ciclo fijo                          # RN-08
 controlador:
@@ -125,13 +126,19 @@ controlador:
 agregar el evento al plan (con su tipo de plan y la demanda asociada) para registrarlo (RF-12)
 ```
 
-### 4.1 Puntos abiertos de la generación de planes (preguntar antes de HU-05/HU-06)
+### 4.1 Reglas de la generación de planes (confirmadas por el autor el 20/11/2026, antes de HU-05)
 
-1. **Demanda en `t_video[p]`** (RN-11): el conteo existe solo al cierre de cada intervalo. Opciones: (a) la del último intervalo cerrado (`intervalo_fin ≤ t_video`), con 0 antes del primer cierre; (b) la del intervalo que contiene `t_video`. Con (a), un carril congelado antes de su primer cierre queda con demanda 0 y solo recibe verde por ciclo fijo o por RN-05.
-2. **Reloj de evaluación**: se asume que la evaluación ocurre cada `intervalo_seg` de **tiempo de simulación** (HU-05 CA-01).
-3. **Estado inicial del plan RECOMENDADO**: se mantiene la decisión previa (carril 1 en verde por ciclo fijo en `t_sim = 0`), A CONFIRMAR.
-4. **Amarillo en las métricas**: ¿cuenta como «verde sin demanda», como «espera» o en ninguna? Se asume ninguna.
-5. **Ejecución abortada**: se asume que no genera planes (Figura 10: los planes se generan al terminar los videos).
+1. **Demanda en `t_video[p]`** (RN-11): la del **último intervalo cerrado** (`intervalo_fin ≤ t_video`); 0 antes del primer cierre. Un carril congelado antes de su primer cierre queda con demanda 0 y solo recibe verde por ciclo fijo o por RN-05.
+2. **Reloj**: la simulación avanza de a **1 s** de `t_sim`; el motor evalúa cada `intervalo_seg` de `t_sim` (HU-05 CA-01). Los vencimientos de `verde_min`, `verde_max` y amarillo se procesan en su segundo exacto, sin esperar la evaluación: al cumplirse `verde_max` se cede en ese instante; al cumplirse `verde_min` se decide con la demanda de ese instante.
+3. **Estado inicial del plan RECOMENDADO**: en `t_sim = 0` el carril 1 arranca en verde por ciclo fijo y el resto en rojo; desde la primera evaluación decide la demanda (respetando `verde_min`).
+4. **Un solo verde a la vez** (RN-06): los tres carriles son conflictivos entre sí.
+5. **Ejecución abortada**: no genera planes; la interfaz informa que el análisis se interrumpió.
+6. **Amarillo en las métricas** (RF-17, HU-09): se asume que no suma a ninguna; se revisa en el Sprint 4.
+7. **Empate total** (RN-07): a igual demanda e igual tiempo en rojo gana la **menor posición**, con un verde de `verde_min`; al cumplirse se reevalúa.
+8. **Tiempo en rojo**: segundos de `t_sim` desde que el carril pasó a rojo; se reinicia al pasar a verde.
+9. **RN-08 dentro del RECOMENDADO**: mientras nadie supere el umbral sigue el ciclo fijo normal (cada verde hasta `verde_max`, amarillo y siguiente por posición desde el carril actual, 1 → 2 → 3 → 1). En la primera evaluación en que alguien supere el umbral manda la demanda, respetando `verde_min` del verde vigente.
+10. **Evaluación durante un amarillo**: se ignora; el carril entrante quedó elegido al iniciar el amarillo.
+11. **Fin del plan**: si `t_sim` alcanza la duración en medio de una fase, el último evento se trunca en la duración (HU-06 CA-05).
 
 ## 5. Esquema SQLite (diccionario de datos, Tabla 18)
 
