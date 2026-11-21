@@ -121,9 +121,11 @@ Reglas de dependencia (§4.1 del TFG):
 - **Cuadro de cierre** (confirmado en HU-04): el intervalo `[k·I, (k+1)·I)` cierra en el **primer cuadro con `t ≥ (k+1)·I`**; los límites se calculan con `k` entero. El **último intervalo incompleto se descarta** (no se registra).
 - **Análisis sin semáforo**: el bucle de cuadros solo detecta, cuenta, guarda y muestra. El motor **no** corre dentro del bucle.
 - **Generación de planes** (HU-05, HU-06): al terminar el análisis (estado aún EnEjecucion), se generan **ambos** planes con duración = tramo analizado, y recién entonces la ejecución pasa a Finalizada. Se generan completos y luego se insertan en `evento_fase` con su `tipo_plan` (así cada evento ya conoce su `duracion`).
-- **RN-11 en la generación**: cada carril lleva su `t_video[p]`, que avanza solo en verde/amarillo; la demanda de un carril en rojo es la ocupación registrada en el instante en que su video quedó detenido. Aplica a los dos planes. Regla exacta para leer la ocupación en `t_video` y reloj de evaluación: **A CONFIRMAR** (ver `diseno.md` §4.1).
-- **Movimientos conflictivos (RN-06)** (A CONFIRMAR): solo un carril en verde a la vez; el resto en rojo.
-- **Ciclo fijo (RN-08)** (confirmado en el Word): rotación por posición 1 → 2 → 3, cada carril con `verde_max` seguido del amarillo. Aplicado durante todo el análisis = plan FIJO. Al iniciar el plan RECOMENDADO, el carril 1 arranca en verde por ciclo fijo (A CONFIRMAR).
+- **RN-11 en la generación**: cada carril lleva su `t_video[p]`, que avanza solo en verde/amarillo; la demanda de un carril en rojo es la ocupación registrada en el instante en que su video quedó detenido. Aplica a los dos planes. Confirmado el 20/11/2026: se usa la demanda del **último intervalo cerrado** (`intervalo_fin ≤ t_video`, 0 antes del primero); paso de 1 s de `t_sim` y evaluación cada `intervalo_seg` de `t_sim`. Reglas completas (vencimientos, amarillo, fin del plan) en `diseno.md` §4.1.
+- **Movimientos conflictivos (RN-06)** (confirmado 20/11/2026): solo un carril en verde a la vez; el resto en rojo.
+- **Ciclo fijo (RN-08)** (confirmado en el Word): rotación por posición 1 → 2 → 3, cada carril con `verde_max` seguido del amarillo. Aplicado durante todo el análisis = plan FIJO. Al iniciar el plan RECOMENDADO, el carril 1 arranca en verde por ciclo fijo y luego decide la demanda (confirmado 20/11/2026). En el RECOMENDADO, mientras nadie supere el umbral sigue el ciclo fijo normal (verde hasta `verde_max`).
+- **Empates (RN-07)** (confirmado 20/11/2026): igual demanda → más tiempo en rojo (en `t_sim`, se reinicia al pasar a verde); si también empatan → **menor posición**, con verde de `verde_min` y reevaluación.
+- **Ejecución abortada** (confirmado 20/11/2026): no genera planes; la interfaz informa que el análisis se interrumpió.
 - **Verde máximo alcanzado (RN-05)** (cambiado en el Word, nov/2026): el carril cede aunque tenga la mayor demanda y el verde pasa **al siguiente carril del ciclo fijo** (ya no al siguiente candidato sobre el umbral).
 - **Demostración (RF-16, RN-11)**: sin modelo y sin escritura en la base; lee videos, conteos y eventos del plan elegido. En rojo se repite el último cuadro. Controles: reproducir, pausar, detener, velocidad ×1/×2. Muestra zona, conteo registrado y semáforo (sin cajas de detección).
 - **Métricas de comparación (RF-17)**: se calculan sobre la ocupación registrada, no sobre la imagen (los vehículos grabados obedecen al semáforo real, riesgo R-11). Las calcula `validacion.py`. Cómo cuenta el amarillo: A CONFIRMAR (se asume que no suma a ninguna).
@@ -140,8 +142,8 @@ Reglas de dependencia (§4.1 del TFG):
 |---|---|---|---|
 | 0 | 19/10–29/10 | Entorno, dataset, entrenamiento en Colab, `best.pt` · adelanto: esqueleto visual de la interfaz (semáforos simulados) | en curso |
 | 1 | 30/10–09/11 | HU-01, HU-02, **HU-08**, RF-10 (+ conteo manual de referencia, tarea QA) | en curso · HU-01, HU-02, RF-10 y HU-08 aprobadas (15/11; CP-01, 02, 03, 10, 11, 21, 25 OK) · PR a `develop`, uno por rama · falta el conteo manual de referencia (QA) |
-| 2 | 10/11–20/11 | HU-03, HU-04 (sprint sin holgura) | en curso · HU-03 aprobada (17/11; CP-04, CP-05 OK; CP-17 manual en Colab, CP-20 en la integración) · HU-04 implementada (17/11; CP-06 OK; CP-18 manual al cierre con RF-15), pendiente de aprobación |
-| 3 | 21/11–01/12 | HU-05, HU-06, RF-12 (generación de ambos planes) | pendiente |
+| 2 | 10/11–20/11 | HU-03, HU-04 (sprint sin holgura) | en curso · HU-03 aprobada (17/11; CP-04, CP-05 OK; CP-17 manual en Colab, CP-20 en la integración) · HU-04 aprobada (20/11, PR #8; CP-06 OK; CP-18 manual al cierre con RF-15) |
+| 3 | 21/11–01/12 | HU-05, HU-06, RF-12 (generación de ambos planes) | en curso · reglas de generación confirmadas (20/11, `diseno.md` §4.1) · HU-05 implementada (20/11; CP-07 OK, 8 pruebas), pendiente de aprobación |
 | 4 | 02/12–10/12 | HU-07, **HU-09** (demostración y comparación, RF-16, RF-17), integración (80 %: 14 de 17 RF) | pendiente |
 | Cierre | > 10/12 | RF-13, RF-14, RF-15, Etapa 4 (≥ 80 % de CP aprobados) | pendiente |
 
