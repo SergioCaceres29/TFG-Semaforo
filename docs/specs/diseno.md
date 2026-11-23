@@ -13,9 +13,12 @@ GestorDemostracion: cargar_plan(id_ejecucion, tipo_plan), reproducir(), pausar()
 LectorVideo      : abrir(ruta) -> bool, leer_cuadro() -> (cuadro, marca_tiempo), ir_a_cuadro(n), obtener_metadatos(), cerrar()
 Detector         (-umbral_confianza: float): cargar_modelo(pesos), detectar(cuadros) -> list[list[Deteccion]], filtrar_por_clase()
 ContadorZonas    : cargar_zonas(id_video), evaluar_pertenencia(deteccion), acumular_por_intervalo(), obtener_demanda_por_carril()
-MotorDecision    (-umbral_demanda: int): generar_plan_recomendado(demanda_registrada, duracion), generar_plan_fijo(duracion),
-                   seleccionar_carril_prioritario(), resolver_empate(), aplicar_ciclo_por_defecto()
-ControladorSemaforo (-estado_actual: dict): solicitar_transicion(carril), avanzar(t_sim), verificar_tiempos(), obtener_estados()
+MotorDecision    (parametros: Parametros): generar_plan_recomendado(demanda, duracion) -> list[EventoFase],
+                   generar_plan_fijo(demanda, duracion) -> list[EventoFase], seleccionar_carril_prioritario(demandas,
+                   tiempos_rojo), resolver_empate(empatados, tiempos_rojo), aplicar_ciclo_por_defecto(carril_actual)
+                   (+ funciones agrupar_demanda(conteos, posicion_por_zona), demanda_en_instante(serie, t_video))
+ControladorSemaforo (parametros, carril_inicial=1): solicitar_transicion(carril) -> bool, avanzar(), verificar_tiempos(),
+                   obtener_estados(), tiempos_rojo(); atributos t_sim, t_video[p], cambios: list[CambioEstado]
 Visualizador     : dibujar_detecciones(), dibujar_zonas(), dibujar_conteos(), dibujar_estado_semaforico()
 RepositorioSQLite: insertar_ejecucion(), actualizar_estado_ejecucion(), insertar_conteo(), insertar_evento_fase(),
                    consultar_conteos(), consultar_plan(id_ejecucion, tipo_plan), exportar_csv()
