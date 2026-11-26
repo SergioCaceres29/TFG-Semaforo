@@ -54,6 +54,10 @@ class TestPresentacion(unittest.TestCase):
         self.assertEqual(rectangulo_video(400, 400), (0, 87, 400, 312))
         self.assertEqual(rectangulo_video(1000, 180), (340, 0, 660, 180))
 
+    def test_video_vertical_usa_su_propia_relacion(self):
+        """Un video 1080×1920 ocupa un rectángulo 9:16, así la zona coincide con la imagen."""
+        self.assertEqual(rectangulo_video(400, 320, 1080 / 1920), (110, 0, 290, 320))
+
 
 class TestSimuladorDemostracion(unittest.TestCase):
     def test_nunca_hay_dos_carriles_en_verde(self):
