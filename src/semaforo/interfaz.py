@@ -171,10 +171,13 @@ def formatear_tiempo(segundos: float) -> str:
     return f"{minutos:02d}:{resto:02d}"
 
 
-def rectangulo_video(ancho: int, alto: int) -> tuple[int, int, int, int]:
-    """Mayor rectángulo 16:9 centrado dentro de un área de ancho × alto."""
-    ancho_video = min(ancho, round(alto * RELACION_VIDEO))
-    alto_video = round(ancho_video / RELACION_VIDEO)
+def rectangulo_video(ancho: int, alto: int, relacion: float = RELACION_VIDEO) -> tuple[int, int, int, int]:
+    """Mayor rectángulo con la relación ancho/alto dada, centrado dentro de un área de ancho × alto.
+
+    Con la relación real del video, la imagen y la zona dibujada comparten origen y escala.
+    """
+    ancho_video = min(ancho, round(alto * relacion))
+    alto_video = round(ancho_video / relacion)
     x = (ancho - ancho_video) // 2
     y = (alto - alto_video) // 2
     return x, y, x + ancho_video, y + alto_video
@@ -618,7 +621,9 @@ class TarjetaCarril(tk.Frame):
     def _dibujar_video(self) -> None:
         lienzo = self._lienzo_video
         lienzo.delete("all")
-        x1, y1, x2, y2 = rectangulo_video(lienzo.winfo_width(), lienzo.winfo_height())
+        relacion = (self.video.metadatos.ancho / self.video.metadatos.alto
+                    if self.video is not None else RELACION_VIDEO)
+        x1, y1, x2, y2 = rectangulo_video(lienzo.winfo_width(), lienzo.winfo_height(), relacion)
         if self.video is not None and x2 - x1 > 1 and y2 - y1 > 1:
             ppm = vista_previa(self.video.primer_cuadro, x2 - x1, y2 - y1)
             self._imagen = tk.PhotoImage(master=self, data=ppm, format="ppm")
