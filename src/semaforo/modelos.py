@@ -10,6 +10,11 @@ NUM_CARRILES = 3
 POSICIONES_CARRIL: tuple[int, ...] = tuple(range(1, NUM_CARRILES + 1))
 
 
+def siguiente_carril(posicion: int) -> int:
+    """RN-05, RN-08: siguiente carril del ciclo fijo por posición, 1 → 2 → 3 → 1."""
+    return POSICIONES_CARRIL[posicion % NUM_CARRILES]
+
+
 class Clase(IntEnum):
     """RN-02: únicas clases admitidas. El valor es el índice del modelo (dataset/data.yaml).
 
@@ -33,6 +38,13 @@ class EstadoSemaforo(Enum):
     VERDE = "VERDE"
     AMARILLO = "AMARILLO"
     ROJO = "ROJO"
+
+
+class TipoPlan(Enum):
+    """RF-08, RF-17: plan del motor de reglas o plan de ciclo fijo para comparar."""
+
+    RECOMENDADO = "RECOMENDADO"
+    FIJO = "FIJO"
 
 
 class EstadoEjecucion(Enum):
@@ -132,6 +144,22 @@ class CambioFase:
 
     marca_tiempo: float
     estados: dict[int, EstadoSemaforo]
+
+
+@dataclass(frozen=True)
+class EventoFase:
+    """RF-08, RF-12: un estado de un carril dentro de un plan, en segundos de simulación.
+
+    La demanda asociada es la del carril en el instante de su video (RN-11). El núcleo traduce
+    la posición a id_zona al guardarlo.
+    """
+
+    tipo_plan: TipoPlan
+    posicion: int
+    estado: EstadoSemaforo
+    marca_tiempo: int
+    duracion: int
+    demanda_asociada: int
 
 
 @dataclass(frozen=True)
