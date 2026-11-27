@@ -143,7 +143,7 @@ Reglas de dependencia (§4.1 del TFG):
 | 0 | 19/10–29/10 | Entorno, dataset, entrenamiento en Colab, `best.pt` · adelanto: esqueleto visual de la interfaz (semáforos simulados) | en curso |
 | 1 | 30/10–09/11 | HU-01, HU-02, **HU-08**, RF-10 (+ conteo manual de referencia, tarea QA) | en curso · HU-01, HU-02, RF-10 y HU-08 aprobadas (15/11; CP-01, 02, 03, 10, 11, 21, 25 OK) · PR a `develop`, uno por rama · falta el conteo manual de referencia (QA) |
 | 2 | 10/11–20/11 | HU-03, HU-04 (sprint sin holgura) | en curso · HU-03 aprobada (17/11; CP-04, CP-05 OK; CP-17 manual en Colab, CP-20 en la integración) · HU-04 aprobada (20/11, PR #8; CP-06 OK; CP-18 manual al cierre con RF-15) |
-| 3 | 21/11–01/12 | HU-05, HU-06, RF-12 (generación de ambos planes) | en curso · reglas de generación confirmadas (20/11, `diseno.md` §4.1) · HU-05 implementada (20/11; CP-07 OK, 8 pruebas), pendiente de aprobación |
+| 3 | 21/11–01/12 | HU-05, HU-06, RF-12 (generación de ambos planes) | en curso · reglas de generación confirmadas (20/11, `diseno.md` §4.1) · HU-05 aprobada (21/11, PR #9; CP-07 OK) · HU-06 implementada (23/11; CP-08 OK, 19 pruebas), pendiente de aprobación · falta RF-12 |
 | 4 | 02/12–10/12 | HU-07, **HU-09** (demostración y comparación, RF-16, RF-17), integración (80 %: 14 de 17 RF) | pendiente |
 | Cierre | > 10/12 | RF-13, RF-14, RF-15, Etapa 4 (≥ 80 % de CP aprobados) | pendiente |
 
